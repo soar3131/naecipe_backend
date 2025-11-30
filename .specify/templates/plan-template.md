@@ -12,26 +12,36 @@
 ## Technical Context
 
 <!--
-  ACTION REQUIRED: Replace the content in this section with the technical details
-  for the project. The structure here is presented in advisory capacity to guide
-  the iteration process.
+  내시피(Naecipe) 백엔드 프로젝트 기본 설정
+  Constitution에 정의된 기술 스택을 기준으로 합니다.
 -->
 
-**Language/Version**: [e.g., Python 3.11, Swift 5.9, Rust 1.75 or NEEDS CLARIFICATION]  
-**Primary Dependencies**: [e.g., FastAPI, UIKit, LLVM or NEEDS CLARIFICATION]  
-**Storage**: [if applicable, e.g., PostgreSQL, CoreData, files or N/A]  
-**Testing**: [e.g., pytest, XCTest, cargo test or NEEDS CLARIFICATION]  
-**Target Platform**: [e.g., Linux server, iOS 15+, WASM or NEEDS CLARIFICATION]
-**Project Type**: [single/web/mobile - determines source structure]  
-**Performance Goals**: [domain-specific, e.g., 1000 req/s, 10k lines/sec, 60 fps or NEEDS CLARIFICATION]  
-**Constraints**: [domain-specific, e.g., <200ms p95, <100MB memory, offline-capable or NEEDS CLARIFICATION]  
-**Scale/Scope**: [domain-specific, e.g., 10k users, 1M LOC, 50 screens or NEEDS CLARIFICATION]
+**Language/Version**: Python 3.11+
+**Primary Dependencies**: FastAPI 0.100+, SQLAlchemy, Pydantic, LangGraph
+**Storage**: PostgreSQL 15+ (pgvector), Redis Cluster 7+, Elasticsearch
+**Message Queue**: Apache Kafka 3.5+
+**Testing**: pytest, pytest-asyncio
+**Target Platform**: Linux (AWS EKS)
+**Project Type**: microservices (services/ 디렉토리 기반)
+**Performance Goals**: 검색 < 200ms, 상세 < 100ms (p99), AI 보정 < 10초
+**Constraints**: 가용성 99.9%, 동시 사용자 50,000명
+**Scale/Scope**: 9개 마이크로서비스, Phase 1 MVP
 
 ## Constitution Check
 
 *GATE: Must pass before Phase 0 research. Re-check after Phase 1 design.*
 
-[Gates determined based on constitution file]
+Constitution 원칙 준수 여부를 확인합니다 (`.specify/memory/constitution.md` 참조):
+
+| 원칙 | 검증 항목 | 상태 |
+|------|----------|------|
+| I. API-First | OpenAPI 스펙 정의됨? | ⬜ |
+| II. Microservice | 도메인 경계 명확함? 독립 배포 가능? | ⬜ |
+| III. TDD | Contract/Integration 테스트 계획됨? | ⬜ |
+| IV. Event-Driven | Kafka 이벤트 스키마 정의됨? | ⬜ |
+| V. Security | OWASP 대응, 입력 검증 계획됨? | ⬜ |
+| VI. Observability | 로깅/메트릭/추적 계획됨? | ⬜ |
+| VII. Simplicity | 불필요한 추상화 없음? | ⬜ |
 
 ## Project Structure
 
@@ -48,51 +58,37 @@ specs/[###-feature]/
 ```
 
 ### Source Code (repository root)
-<!--
-  ACTION REQUIRED: Replace the placeholder tree below with the concrete layout
-  for this feature. Delete unused options and expand the chosen structure with
-  real paths (e.g., apps/admin, packages/something). The delivered plan must
-  not include Option labels.
--->
+
+내시피 백엔드는 마이크로서비스 구조를 따릅니다:
 
 ```text
-# [REMOVE IF UNUSED] Option 1: Single project (DEFAULT)
-src/
-├── models/
-├── services/
-├── cli/
-└── lib/
+services/
+├── [service-name]/          # 개별 마이크로서비스
+│   ├── src/
+│   │   ├── api/             # FastAPI 라우터
+│   │   ├── models/          # SQLAlchemy 모델
+│   │   ├── schemas/         # Pydantic 스키마
+│   │   ├── services/        # 비즈니스 로직
+│   │   └── events/          # Kafka 이벤트 핸들러
+│   ├── tests/
+│   │   ├── contract/        # API 계약 테스트
+│   │   ├── integration/     # 통합 테스트
+│   │   └── unit/            # 단위 테스트
+│   ├── Dockerfile
+│   └── pyproject.toml
+│
+shared/
+├── proto/                   # gRPC 프로토콜 정의
+├── schemas/                 # 공통 Pydantic 모델
+└── utils/                   # 공통 유틸리티
 
-tests/
-├── contract/
-├── integration/
-└── unit/
-
-# [REMOVE IF UNUSED] Option 2: Web application (when "frontend" + "backend" detected)
-backend/
-├── src/
-│   ├── models/
-│   ├── services/
-│   └── api/
-└── tests/
-
-frontend/
-├── src/
-│   ├── components/
-│   ├── pages/
-│   └── services/
-└── tests/
-
-# [REMOVE IF UNUSED] Option 3: Mobile + API (when "iOS/Android" detected)
-api/
-└── [same as backend above]
-
-ios/ or android/
-└── [platform-specific structure: feature modules, UI flows, platform tests]
+specs/                       # Spec-Kit 기능 명세
 ```
 
-**Structure Decision**: [Document the selected structure and reference the real
-directories captured above]
+**서비스 목록** (Constitution 참조):
+- recipe-service (8001), user-service (8002), cookbook-service (8003)
+- ai-agent-service (8004), embedding-service (8005), search-service (8006)
+- notification-service (8007), analytics-service (8008), ingestion-service (8009)
 
 ## Complexity Tracking
 

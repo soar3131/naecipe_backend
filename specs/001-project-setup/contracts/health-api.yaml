@@ -1,0 +1,161 @@
+openapi: 3.0.3
+info:
+  title: Naecipe Health Check API
+  description: |
+    모든 마이크로서비스가 공통으로 제공하는 헬스체크 API입니다.
+    Kubernetes liveness/readiness probe에서 사용됩니다.
+  version: 1.0.0
+  contact:
+    name: Naecipe Backend Team
+
+servers:
+  - url: http://localhost:{port}
+    description: 로컬 개발 서버
+    variables:
+      port:
+        default: '8001'
+        enum:
+          - '8001'  # recipe-service
+          - '8002'  # user-service
+          - '8003'  # cookbook-service
+          - '8004'  # ai-agent-service
+          - '8005'  # embedding-service
+          - '8006'  # search-service
+          - '8007'  # notification-service
+          - '8008'  # analytics-service
+          - '8009'  # ingestion-service
+
+paths:
+  /health:
+    get:
+      summary: 서비스 생존 확인 (Liveness)
+      description: |
+        서비스가 실행 중인지 확인합니다.
+        Kubernetes liveness probe에서 사용됩니다.
+        의존 서비스(DB, Redis 등) 상태와 무관하게 서비스 프로세스의 생존 여부만 확인합니다.
+      operationId: healthCheck
+      tags:
+        - Health
+      responses:
+        '200':
+          description: 서비스가 정상적으로 실행 중
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/HealthResponse'
+              example:
+                status: healthy
+                service: recipe-service
+                version: 1.0.0
+                timestamp: '2025-11-30T12:00:00Z'
+
+  /ready:
+    get:
+      summary: 서비스 준비 상태 확인 (Readiness)
+      description: |
+        서비스가 트래픽을 처리할 준비가 되었는지 확인합니다.
+        Kubernetes readiness probe에서 사용됩니다.
+        의존 서비스(DB, Redis 등) 연결 상태를 확인합니다.
+      operationId: readinessCheck
+      tags:
+        - Health
+      responses:
+        '200':
+          description: 서비스가 트래픽을 처리할 준비 완료
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ReadinessResponse'
+              example:
+                status: ready
+                service: recipe-service
+                checks:
+                  database: true
+                  redis: true
+                  kafka: true
+                timestamp: '2025-11-30T12:00:00Z'
+        '503':
+          description: 서비스가 트래픽을 처리할 준비가 되지 않음
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ReadinessResponse'
+              example:
+                status: not_ready
+                service: recipe-service
+                checks:
+                  database: true
+                  redis: false
+                  kafka: true
+                timestamp: '2025-11-30T12:00:00Z'
+
+components:
+  schemas:
+    HealthResponse:
+      type: object
+      required:
+        - status
+        - service
+        - version
+        - timestamp
+      properties:
+        status:
+          type: string
+          enum:
+            - healthy
+          description: 서비스 상태
+        service:
+          type: string
+          description: 서비스 이름
+          example: recipe-service
+        version:
+          type: string
+          description: 서비스 버전
+          example: 1.0.0
+        timestamp:
+          type: string
+          format: date-time
+          description: 응답 시간 (ISO 8601)
+
+    ReadinessResponse:
+      type: object
+      required:
+        - status
+        - service
+        - checks
+        - timestamp
+      properties:
+        status:
+          type: string
+          enum:
+            - ready
+            - not_ready
+          description: 준비 상태
+        service:
+          type: string
+          description: 서비스 이름
+          example: recipe-service
+        checks:
+          type: object
+          description: 의존 서비스 연결 상태
+          properties:
+            database:
+              type: boolean
+              description: PostgreSQL 연결 상태
+            redis:
+              type: boolean
+              description: Redis 연결 상태
+            kafka:
+              type: boolean
+              description: Kafka 연결 상태
+            elasticsearch:
+              type: boolean
+              description: Elasticsearch 연결 상태 (search-service만)
+        timestamp:
+          type: string
+          format: date-time
+          description: 응답 시간 (ISO 8601)
+
+tags:
+  - name: Health
+    description: 서비스 헬스체크 엔드포인트
