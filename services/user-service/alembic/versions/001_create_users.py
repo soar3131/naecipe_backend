@@ -10,6 +10,7 @@ from typing import Sequence, Union
 
 import sqlalchemy as sa
 from alembic import op
+from sqlalchemy.dialects import postgresql
 
 # revision identifiers, used by Alembic.
 revision: str = "001"
@@ -20,12 +21,19 @@ depends_on: Union[str, Sequence[str], None] = None
 
 def upgrade() -> None:
     """Create users table"""
+    # Create enum type first using raw SQL to avoid double creation
+    # IMPORTANT: Use uppercase values to match Python Enum values (UserStatus.ACTIVE = "ACTIVE")
+    op.execute("CREATE TYPE user_status AS ENUM ('ACTIVE', 'INACTIVE', 'LOCKED')")
+
+    # Use postgresql.ENUM with create_type=False since we created it above
+    user_status_enum = postgresql.ENUM("ACTIVE", "INACTIVE", "LOCKED", name="user_status", create_type=False)
+
     op.create_table(
         "users",
         sa.Column("id", sa.UUID(), nullable=False),
         sa.Column("email", sa.String(length=255), nullable=False),
         sa.Column("password_hash", sa.String(length=255), nullable=False),
-        sa.Column("status", sa.String(length=20), nullable=False, server_default="active"),
+        sa.Column("status", user_status_enum, nullable=False, server_default="ACTIVE"),
         sa.Column(
             "created_at",
             sa.DateTime(timezone=True),
@@ -54,3 +62,6 @@ def downgrade() -> None:
     op.drop_index("ix_users_status", table_name="users")
     op.drop_index("ix_users_email", table_name="users")
     op.drop_table("users")
+
+    # Drop enum type using raw SQL
+    op.execute("DROP TYPE user_status")

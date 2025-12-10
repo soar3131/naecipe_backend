@@ -19,7 +19,7 @@ class UserResponse(BaseModel):
 
     id: str = Field(..., description="사용자 ID")
     email: EmailStr = Field(..., description="이메일 주소")
-    status: Literal["active", "inactive", "locked"] = Field(..., description="계정 상태")
+    status: Literal["ACTIVE", "INACTIVE", "LOCKED"] = Field(..., description="계정 상태")
     created_at: datetime = Field(..., description="계정 생성 시각")
 
     model_config = {"from_attributes": True}

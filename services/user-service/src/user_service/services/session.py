@@ -3,7 +3,7 @@
 from typing import Any
 
 from user_service.core.config import settings
-from user_service.db.redis import get_redis_client
+from user_service.db.redis import get_redis
 
 
 class SessionService:
@@ -22,7 +22,7 @@ class SessionService:
             user_id: User UUID
             refresh_token: Refresh token to store
         """
-        redis = await get_redis_client()
+        redis = await get_redis()
         key = f"{cls.SESSION_PREFIX}{user_id}"
         expire_seconds = settings.REFRESH_TOKEN_EXPIRE_DAYS * 24 * 60 * 60
 
@@ -38,7 +38,7 @@ class SessionService:
         Returns:
             Stored refresh token or None
         """
-        redis = await get_redis_client()
+        redis = await get_redis()
         key = f"{cls.SESSION_PREFIX}{user_id}"
 
         return await redis.get(key)
@@ -50,7 +50,7 @@ class SessionService:
         Args:
             user_id: User UUID
         """
-        redis = await get_redis_client()
+        redis = await get_redis()
         key = f"{cls.SESSION_PREFIX}{user_id}"
 
         await redis.delete(key)
@@ -63,7 +63,7 @@ class SessionService:
             token_jti: Token unique identifier (jti claim)
             expires_in: Time until token expiry in seconds
         """
-        redis = await get_redis_client()
+        redis = await get_redis()
         key = f"{cls.BLACKLIST_PREFIX}{token_jti}"
 
         # Store with TTL matching token expiry
@@ -79,7 +79,7 @@ class SessionService:
         Returns:
             True if blacklisted, False otherwise
         """
-        redis = await get_redis_client()
+        redis = await get_redis()
         key = f"{cls.BLACKLIST_PREFIX}{token_jti}"
 
         return await redis.exists(key) > 0
@@ -94,7 +94,7 @@ class SessionService:
         Returns:
             Number of failed login attempts
         """
-        redis = await get_redis_client()
+        redis = await get_redis()
         key = f"{cls.LOGIN_FAILURE_PREFIX}{email.lower()}"
 
         count = await redis.get(key)
@@ -110,7 +110,7 @@ class SessionService:
         Returns:
             New failure count
         """
-        redis = await get_redis_client()
+        redis = await get_redis()
         key = f"{cls.LOGIN_FAILURE_PREFIX}{email.lower()}"
         expire_seconds = settings.ACCOUNT_LOCK_MINUTES * 60
 
@@ -127,7 +127,7 @@ class SessionService:
         Args:
             email: User email
         """
-        redis = await get_redis_client()
+        redis = await get_redis()
         key = f"{cls.LOGIN_FAILURE_PREFIX}{email.lower()}"
 
         await redis.delete(key)

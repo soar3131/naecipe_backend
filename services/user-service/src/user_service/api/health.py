@@ -4,7 +4,7 @@ from fastapi import APIRouter, Depends
 from sqlalchemy import text
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from user_service.db.redis import get_redis_client
+from user_service.db.redis import get_redis
 from user_service.db.session import get_db
 
 router = APIRouter()
@@ -35,7 +35,7 @@ async def readiness_check(
 
     # Redis check
     try:
-        redis = await get_redis_client()
+        redis = await get_redis()
         await redis.ping()
         checks["redis"] = True
     except Exception:

@@ -14,9 +14,9 @@ from user_service.db.base import Base
 class UserStatus(str, enum.Enum):
     """User account status"""
 
-    ACTIVE = "active"
-    INACTIVE = "inactive"
-    LOCKED = "locked"
+    ACTIVE = "ACTIVE"
+    INACTIVE = "INACTIVE"
+    LOCKED = "LOCKED"
 
 
 class User(Base):

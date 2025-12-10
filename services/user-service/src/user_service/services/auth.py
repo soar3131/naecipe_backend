@@ -1,6 +1,7 @@
 """Authentication service for login and token management"""
 
 from datetime import datetime, timedelta, timezone
+from uuid import uuid4
 
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
@@ -81,7 +82,7 @@ class AuthService:
 
         # Generate tokens
         access_token = create_access_token(str(user.id))
-        refresh_token = create_refresh_token(str(user.id))
+        refresh_token = create_refresh_token(str(user.id), jti=str(uuid4()))
 
         # Store refresh token in session
         await SessionService.store_refresh_token(str(user.id), refresh_token)
@@ -131,7 +132,7 @@ class AuthService:
 
         # Generate new tokens (token rotation)
         new_access_token = create_access_token(user_id)
-        new_refresh_token = create_refresh_token(user_id)
+        new_refresh_token = create_refresh_token(user_id, jti=str(uuid4()))
 
         # Update session with new refresh token
         await SessionService.store_refresh_token(user_id, new_refresh_token)
