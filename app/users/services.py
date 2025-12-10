@@ -28,7 +28,22 @@ from app.core.security import (
 )
 from app.infra.redis import get_redis
 from app.users.models import OAuthAccount, OAuthProvider, TastePreference, User, UserProfile, UserStatus
-from app.users.schemas import RegisterRequest, RegisterResponse, TokenResponse
+from app.users.schemas import (
+    OAuthAuthorizationResponse,
+    OAuthLoginResponse,
+    OAuthProviderEnum,
+    OAuthUserData,
+    OAuthUserInfo,
+    PreferencesData,
+    PreferencesUpdateRequest,
+    ProfileData,
+    ProfileUpdateRequest,
+    RegisterRequest,
+    RegisterResponse,
+    TastePreferenceData,
+    TasteValues,
+    TokenResponse,
+)
 
 
 # ==========================================================================
@@ -330,10 +345,8 @@ class ProfileService:
     def __init__(self, db: AsyncSession) -> None:
         self.db = db
 
-    async def get_profile(self, user_id: str) -> "ProfileData | None":
+    async def get_profile(self, user_id: str) -> ProfileData | None:
         """사용자 프로필 조회"""
-        from app.users.schemas import ProfileData
-
         result = await self.db.execute(select(User).where(User.id == user_id))
         user = result.scalar_one_or_none()
 
@@ -356,11 +369,9 @@ class ProfileService:
     async def update_profile(
         self,
         user_id: str,
-        data: "ProfileUpdateRequest",
-    ) -> "ProfileData | None":
+        data: ProfileUpdateRequest,
+    ) -> ProfileData | None:
         """사용자 프로필 수정"""
-        from app.users.schemas import ProfileData
-
         result = await self.db.execute(select(User).where(User.id == user_id))
         user = result.scalar_one_or_none()
 
@@ -423,10 +434,8 @@ class PreferenceService:
     def __init__(self, db: AsyncSession) -> None:
         self.db = db
 
-    async def get_preferences(self, user_id: str) -> "PreferencesData | None":
+    async def get_preferences(self, user_id: str) -> PreferencesData | None:
         """사용자 취향 설정 조회"""
-        from app.users.schemas import PreferencesData, TastePreferenceData
-
         result = await self.db.execute(
             select(UserProfile).where(UserProfile.user_id == user_id)
         )
@@ -462,8 +471,8 @@ class PreferenceService:
     async def update_preferences(
         self,
         user_id: str,
-        data: "PreferencesUpdateRequest",
-    ) -> "PreferencesData | None":
+        data: PreferencesUpdateRequest,
+    ) -> PreferencesData | None:
         """사용자 취향 설정 수정"""
         result = await self.db.execute(
             select(UserProfile).where(UserProfile.user_id == user_id)
@@ -498,8 +507,6 @@ class PreferenceService:
         taste_data: dict,
     ) -> None:
         """맛 취향 업데이트"""
-        from app.users.schemas import TasteValues
-
         existing_result = await self.db.execute(
             select(TastePreference).where(TastePreference.user_id == user_id)
         )
@@ -522,8 +529,8 @@ class PreferenceService:
     def _apply_taste_values(
         self,
         pref: TastePreference,
-        values: "TasteValues",
-        overall_values: "TasteValues | None",
+        values: TasteValues,
+        overall_values: TasteValues | None,
         inherit_overall: bool,
     ) -> None:
         """맛 취향 값 적용"""
@@ -562,12 +569,11 @@ class OAuthService:
         self.db = db
 
     async def generate_authorization_url(
-        self, provider: "OAuthProviderEnum"
-    ) -> "OAuthAuthorizationResponse":
+        self, provider: OAuthProviderEnum,
+    ) -> OAuthAuthorizationResponse:
         """OAuth 인증 URL 생성"""
         import secrets
         from app.users.oauth_providers import OAuthProviders
-        from app.users.schemas import OAuthAuthorizationResponse
 
         config = OAuthProviders.get(provider)
 
@@ -600,11 +606,9 @@ class OAuthService:
         )
 
     async def handle_callback(
-        self, provider: "OAuthProviderEnum", code: str, state: str
-    ) -> "OAuthLoginResponse":
+        self, provider: OAuthProviderEnum, code: str, state: str,
+    ) -> OAuthLoginResponse:
         """OAuth 콜백 처리"""
-        from app.users.schemas import OAuthLoginResponse, OAuthUserInfo
-
         await self._validate_state(state, provider)
         oauth_token = await self._exchange_code_for_token(provider, code)
         oauth_user_data = await self._get_user_info(provider, oauth_token)
@@ -630,7 +634,7 @@ class OAuthService:
         )
 
     async def link_account(
-        self, user_id: str, provider: "OAuthProviderEnum", code: str, state: str
+        self, user_id: str, provider: OAuthProviderEnum, code: str, state: str,
     ) -> OAuthAccount:
         """기존 사용자에 OAuth 계정 연동"""
         from app.core.exceptions import OAuthAccountAlreadyLinkedError
@@ -656,7 +660,7 @@ class OAuthService:
 
         return oauth_account
 
-    async def _validate_state(self, state: str, expected_provider: "OAuthProviderEnum") -> None:
+    async def _validate_state(self, state: str, expected_provider: OAuthProviderEnum) -> None:
         """OAuth state 검증"""
         from app.core.exceptions import OAuthStateError
 
@@ -673,7 +677,7 @@ class OAuthService:
             raise OAuthStateError()
 
     async def _exchange_code_for_token(
-        self, provider: "OAuthProviderEnum", code: str
+        self, provider: OAuthProviderEnum, code: str,
     ) -> str:
         """인가 코드를 액세스 토큰으로 교환"""
         import httpx
@@ -723,13 +727,12 @@ class OAuthService:
                 )
 
     async def _get_user_info(
-        self, provider: "OAuthProviderEnum", access_token: str
-    ) -> "OAuthUserData":
+        self, provider: OAuthProviderEnum, access_token: str,
+    ) -> OAuthUserData:
         """OAuth 제공자로부터 사용자 정보 조회"""
         import httpx
         from app.core.exceptions import OAuthProviderError
         from app.users.oauth_providers import OAuthProviders, parse_user_info
-        from app.users.schemas import OAuthUserData
 
         config = OAuthProviders.get(provider)
         headers = {"Authorization": f"Bearer {access_token}"}
@@ -766,7 +769,7 @@ class OAuthService:
                 )
 
     async def _find_or_create_user(
-        self, oauth_data: "OAuthUserData"
+        self, oauth_data: OAuthUserData,
     ) -> tuple[User, OAuthAccount, bool]:
         """사용자 조회 또는 생성"""
         is_new_user = False
@@ -811,7 +814,7 @@ class OAuthService:
         return user, oauth_account, is_new_user
 
     async def _get_oauth_account_by_provider_user_id(
-        self, provider: "OAuthProviderEnum", provider_user_id: str
+        self, provider: OAuthProviderEnum, provider_user_id: str,
     ) -> OAuthAccount | None:
         """OAuth 계정 조회"""
         result = await self.db.execute(
