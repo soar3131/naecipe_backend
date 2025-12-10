@@ -1,0 +1,640 @@
+openapi: 3.0.3
+info:
+  title: Naecipe User Profile & Preferences API
+  description: |
+    사용자 프로필 및 취향 설정 API (SPEC-003)
+
+    ## 기능
+    - 프로필 조회/수정 (이름, 이미지)
+    - 식이 제한 및 알레르기 설정
+    - 맛 취향 프로파일 설정 (전체/카테고리별)
+    - 부가 정보 설정 (요리 실력, 가구 인원, 선호 카테고리)
+
+    ## 인증
+    모든 API는 JWT Bearer 토큰 인증이 필요합니다.
+  version: 1.0.0
+  contact:
+    name: Naecipe Backend Team
+servers:
+  - url: http://localhost:8002/api/v1
+    description: Local development (user-service)
+  - url: https://api.naecipe.com/api/v1
+    description: Production
+
+tags:
+  - name: Profile
+    description: 사용자 프로필 관리
+  - name: Preferences
+    description: 사용자 취향 설정
+
+paths:
+  /users/me:
+    get:
+      summary: 내 프로필 조회
+      description: 현재 로그인한 사용자의 프로필 정보를 조회합니다.
+      operationId: getMyProfile
+      tags:
+        - Profile
+      security:
+        - bearerAuth: []
+      responses:
+        '200':
+          description: 프로필 조회 성공
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ProfileResponse'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '500':
+          $ref: '#/components/responses/InternalError'
+
+    put:
+      summary: 내 프로필 수정
+      description: |
+        현재 로그인한 사용자의 프로필 정보를 수정합니다.
+        제공된 필드만 업데이트되며, 누락된 필드는 기존 값이 유지됩니다.
+      operationId: updateMyProfile
+      tags:
+        - Profile
+      security:
+        - bearerAuth: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/ProfileUpdateRequest'
+      responses:
+        '200':
+          description: 프로필 수정 성공
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ProfileResponse'
+        '400':
+          $ref: '#/components/responses/ValidationError'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '500':
+          $ref: '#/components/responses/InternalError'
+
+  /users/me/preferences:
+    get:
+      summary: 내 취향 설정 조회
+      description: 현재 로그인한 사용자의 취향 설정(식이 제한, 알레르기, 맛 취향 등)을 조회합니다.
+      operationId: getMyPreferences
+      tags:
+        - Preferences
+      security:
+        - bearerAuth: []
+      responses:
+        '200':
+          description: 취향 설정 조회 성공
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/PreferencesResponse'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '500':
+          $ref: '#/components/responses/InternalError'
+
+    put:
+      summary: 내 취향 설정 수정
+      description: |
+        현재 로그인한 사용자의 취향 설정을 수정합니다.
+        제공된 필드만 업데이트되며, 누락된 필드는 기존 값이 유지됩니다.
+
+        ## 맛 취향 설정
+        - `tastePreferences.overall`: 전체 기본 취향
+        - `tastePreferences.{category}`: 카테고리별 취향 (korean, japanese 등)
+      operationId: updateMyPreferences
+      tags:
+        - Preferences
+      security:
+        - bearerAuth: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/PreferencesUpdateRequest'
+            examples:
+              dietary_only:
+                summary: 식이 제한만 설정
+                value:
+                  dietaryRestrictions:
+                    - vegetarian
+              allergies_only:
+                summary: 알레르기만 설정
+                value:
+                  allergies:
+                    - peanut
+                    - shellfish
+              taste_overall:
+                summary: 전체 맛 취향 설정
+                value:
+                  tastePreferences:
+                    overall:
+                      sweetness: 3
+                      saltiness: 3
+                      spiciness: 4
+                      sourness: 2
+              taste_by_category:
+                summary: 카테고리별 맛 취향 설정
+                value:
+                  tastePreferences:
+                    overall:
+                      sweetness: 3
+                      saltiness: 3
+                      spiciness: 3
+                      sourness: 3
+                    korean:
+                      spiciness: 5
+                    japanese:
+                      sweetness: 4
+              full_preferences:
+                summary: 전체 취향 설정
+                value:
+                  dietaryRestrictions:
+                    - vegetarian
+                  allergies:
+                    - peanut
+                  cuisinePreferences:
+                    - korean
+                    - japanese
+                  skillLevel: 3
+                  householdSize: 2
+                  tastePreferences:
+                    overall:
+                      sweetness: 3
+                      saltiness: 3
+                      spiciness: 4
+                      sourness: 2
+      responses:
+        '200':
+          description: 취향 설정 수정 성공
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/PreferencesResponse'
+        '400':
+          $ref: '#/components/responses/ValidationError'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '500':
+          $ref: '#/components/responses/InternalError'
+
+  /users/me/preferences/dietary-options:
+    get:
+      summary: 식이 제한 옵션 목록
+      description: 설정 가능한 식이 제한 값 목록을 반환합니다.
+      operationId: getDietaryOptions
+      tags:
+        - Preferences
+      responses:
+        '200':
+          description: 식이 제한 옵션 목록
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/DietaryOptionsResponse'
+
+  /users/me/preferences/allergy-options:
+    get:
+      summary: 알레르기 옵션 목록
+      description: 설정 가능한 알레르기 값 목록을 반환합니다.
+      operationId: getAllergyOptions
+      tags:
+        - Preferences
+      responses:
+        '200':
+          description: 알레르기 옵션 목록
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/AllergyOptionsResponse'
+
+  /users/me/preferences/cuisine-options:
+    get:
+      summary: 요리 카테고리 옵션 목록
+      description: 설정 가능한 요리 카테고리 값 목록을 반환합니다.
+      operationId: getCuisineOptions
+      tags:
+        - Preferences
+      responses:
+        '200':
+          description: 요리 카테고리 옵션 목록
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/CuisineOptionsResponse'
+
+components:
+  securitySchemes:
+    bearerAuth:
+      type: http
+      scheme: bearer
+      bearerFormat: JWT
+      description: JWT Access Token
+
+  schemas:
+    # Request Schemas
+    ProfileUpdateRequest:
+      type: object
+      properties:
+        displayName:
+          type: string
+          minLength: 1
+          maxLength: 50
+          description: 표시 이름
+          example: "홍길동"
+        profileImageUrl:
+          type: string
+          format: uri
+          maxLength: 2048
+          nullable: true
+          description: 프로필 이미지 URL
+          example: "https://cdn.naecipe.com/profiles/user123.jpg"
+
+    PreferencesUpdateRequest:
+      type: object
+      properties:
+        dietaryRestrictions:
+          type: array
+          items:
+            $ref: '#/components/schemas/DietaryRestriction'
+          description: 식이 제한 목록
+        allergies:
+          type: array
+          items:
+            $ref: '#/components/schemas/Allergy'
+          description: 알레르기 목록
+        cuisinePreferences:
+          type: array
+          items:
+            $ref: '#/components/schemas/CuisineCategory'
+          maxItems: 10
+          description: 선호 요리 카테고리 목록 (최대 10개)
+        skillLevel:
+          type: integer
+          minimum: 1
+          maximum: 5
+          nullable: true
+          description: 요리 실력 수준 (1-5)
+        householdSize:
+          type: integer
+          minimum: 1
+          maximum: 20
+          nullable: true
+          description: 가구 인원 수 (1-20)
+        tastePreferences:
+          type: object
+          additionalProperties:
+            $ref: '#/components/schemas/TasteValues'
+          description: 맛 취향 (overall 또는 카테고리별)
+          example:
+            overall:
+              sweetness: 3
+              saltiness: 3
+              spiciness: 4
+              sourness: 2
+            korean:
+              spiciness: 5
+
+    # Response Schemas
+    ProfileResponse:
+      type: object
+      required:
+        - success
+        - data
+      properties:
+        success:
+          type: boolean
+          example: true
+        data:
+          $ref: '#/components/schemas/ProfileData'
+
+    ProfileData:
+      type: object
+      required:
+        - id
+        - email
+        - displayName
+        - createdAt
+        - updatedAt
+      properties:
+        id:
+          type: string
+          format: uuid
+          description: 사용자 ID
+        email:
+          type: string
+          format: email
+          description: 이메일 주소
+        displayName:
+          type: string
+          description: 표시 이름
+        profileImageUrl:
+          type: string
+          format: uri
+          nullable: true
+          description: 프로필 이미지 URL
+        createdAt:
+          type: string
+          format: date-time
+          description: 계정 생성 시각
+        updatedAt:
+          type: string
+          format: date-time
+          description: 프로필 수정 시각
+
+    PreferencesResponse:
+      type: object
+      required:
+        - success
+        - data
+      properties:
+        success:
+          type: boolean
+          example: true
+        data:
+          $ref: '#/components/schemas/PreferencesData'
+
+    PreferencesData:
+      type: object
+      properties:
+        dietaryRestrictions:
+          type: array
+          items:
+            $ref: '#/components/schemas/DietaryRestriction'
+          description: 식이 제한 목록
+        allergies:
+          type: array
+          items:
+            $ref: '#/components/schemas/Allergy'
+          description: 알레르기 목록
+        cuisinePreferences:
+          type: array
+          items:
+            $ref: '#/components/schemas/CuisineCategory'
+          description: 선호 요리 카테고리 목록
+        skillLevel:
+          type: integer
+          minimum: 1
+          maximum: 5
+          nullable: true
+          description: 요리 실력 수준
+        householdSize:
+          type: integer
+          minimum: 1
+          maximum: 20
+          nullable: true
+          description: 가구 인원 수
+        tastePreferences:
+          type: object
+          additionalProperties:
+            $ref: '#/components/schemas/TasteValues'
+          description: 맛 취향
+        updatedAt:
+          type: string
+          format: date-time
+          description: 취향 설정 수정 시각
+
+    TasteValues:
+      type: object
+      properties:
+        sweetness:
+          type: integer
+          minimum: 1
+          maximum: 5
+          description: 단맛 선호도 (1-5)
+        saltiness:
+          type: integer
+          minimum: 1
+          maximum: 5
+          description: 짠맛 선호도 (1-5)
+        spiciness:
+          type: integer
+          minimum: 1
+          maximum: 5
+          description: 매운맛 선호도 (1-5)
+        sourness:
+          type: integer
+          minimum: 1
+          maximum: 5
+          description: 신맛 선호도 (1-5)
+
+    # Enum Schemas
+    DietaryRestriction:
+      type: string
+      enum:
+        - vegetarian
+        - vegan
+        - pescatarian
+        - halal
+        - kosher
+        - gluten_free
+        - lactose_free
+        - low_sodium
+        - low_sugar
+      description: 식이 제한
+
+    Allergy:
+      type: string
+      enum:
+        - peanut
+        - tree_nut
+        - milk
+        - egg
+        - wheat
+        - soy
+        - fish
+        - shellfish
+        - sesame
+      description: 알레르기
+
+    CuisineCategory:
+      type: string
+      enum:
+        - korean
+        - japanese
+        - chinese
+        - western
+        - italian
+        - mexican
+        - thai
+        - vietnamese
+        - indian
+        - fusion
+      description: 요리 카테고리
+
+    # Options Response Schemas
+    DietaryOptionsResponse:
+      type: object
+      required:
+        - success
+        - data
+      properties:
+        success:
+          type: boolean
+          example: true
+        data:
+          type: array
+          items:
+            $ref: '#/components/schemas/OptionItem'
+
+    AllergyOptionsResponse:
+      type: object
+      required:
+        - success
+        - data
+      properties:
+        success:
+          type: boolean
+          example: true
+        data:
+          type: array
+          items:
+            $ref: '#/components/schemas/OptionItem'
+
+    CuisineOptionsResponse:
+      type: object
+      required:
+        - success
+        - data
+      properties:
+        success:
+          type: boolean
+          example: true
+        data:
+          type: array
+          items:
+            $ref: '#/components/schemas/OptionItem'
+
+    OptionItem:
+      type: object
+      required:
+        - value
+        - label
+      properties:
+        value:
+          type: string
+          description: API에서 사용하는 값
+        label:
+          type: string
+          description: 사용자에게 표시할 라벨
+
+    # Error Schemas
+    ErrorResponse:
+      type: object
+      required:
+        - success
+        - error
+      properties:
+        success:
+          type: boolean
+          example: false
+        error:
+          $ref: '#/components/schemas/ErrorDetail'
+
+    ErrorDetail:
+      type: object
+      required:
+        - type
+        - title
+        - status
+        - detail
+      properties:
+        type:
+          type: string
+          description: 에러 유형 URI
+          example: "/errors/validation"
+        title:
+          type: string
+          description: 짧은 에러 제목
+          example: "Validation Error"
+        status:
+          type: integer
+          description: HTTP 상태 코드
+          example: 400
+        detail:
+          type: string
+          description: 상세 설명
+          example: "입력값이 올바르지 않습니다."
+        instance:
+          type: string
+          description: 발생 위치
+          example: "/api/v1/users/me/preferences"
+        errors:
+          type: array
+          items:
+            $ref: '#/components/schemas/FieldError'
+
+    FieldError:
+      type: object
+      required:
+        - field
+        - message
+        - code
+      properties:
+        field:
+          type: string
+          description: 오류가 발생한 필드
+          example: "displayName"
+        message:
+          type: string
+          description: 오류 메시지
+          example: "표시 이름은 1-50자 사이여야 합니다"
+        code:
+          type: string
+          description: 오류 코드
+          example: "STRING_LENGTH"
+
+  responses:
+    Unauthorized:
+      description: 인증 실패
+      content:
+        application/json:
+          schema:
+            $ref: '#/components/schemas/ErrorResponse'
+          example:
+            success: false
+            error:
+              type: "/errors/unauthorized"
+              title: "Unauthorized"
+              status: 401
+              detail: "유효하지 않은 인증 토큰입니다."
+
+    ValidationError:
+      description: 유효성 검사 실패
+      content:
+        application/json:
+          schema:
+            $ref: '#/components/schemas/ErrorResponse'
+          example:
+            success: false
+            error:
+              type: "/errors/validation"
+              title: "Validation Error"
+              status: 400
+              detail: "입력값이 올바르지 않습니다."
+              errors:
+                - field: "displayName"
+                  message: "표시 이름은 1-50자 사이여야 합니다"
+                  code: "STRING_LENGTH"
+
+    InternalError:
+      description: 서버 내부 오류
+      content:
+        application/json:
+          schema:
+            $ref: '#/components/schemas/ErrorResponse'
+          example:
+            success: false
+            error:
+              type: "/errors/internal"
+              title: "Internal Server Error"
+              status: 500
+              detail: "서버 내부 오류가 발생했습니다."

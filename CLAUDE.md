@@ -150,6 +150,9 @@ Co-Authored-By: Claude <noreply@anthropic.com>
 - PostgreSQL 15+ (users 테이블), Redis 7+ (세션/블랙리스트) (001-user-auth)
 - Python 3.11+ + FastAPI 0.100+, SQLAlchemy, Pydantic, httpx (OAuth HTTP 클라이언트) (002-oauth-social-login)
 - PostgreSQL 15+ (user-service DB), Redis 7+ (세션/state 관리) (002-oauth-social-login)
+- Python 3.11+ + FastAPI 0.100+, SQLAlchemy, Pydantic, redis[hiredis] (003-recipe-basic-crud)
+- PostgreSQL 15+ (Recipe DB), Redis 7+ (캐시) (003-recipe-basic-crud)
+- PostgreSQL 15+ (User DB), Redis 7+ (세션 캐시) (003-user-profile-preferences)
 
 ## Recent Changes
 - 001-project-setup: Added Python 3.11+ + FastAPI 0.100+, SQLAlchemy 2.0+, Pydantic 2.0+, Alembic

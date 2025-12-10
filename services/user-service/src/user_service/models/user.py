@@ -4,7 +4,7 @@ import enum
 from datetime import datetime
 from uuid import uuid4
 
-from typing import TYPE_CHECKING
+from typing import TYPE_CHECKING, Optional
 
 from sqlalchemy import DateTime, Enum, String, func
 from sqlalchemy.dialects.postgresql import UUID
@@ -12,6 +12,8 @@ from sqlalchemy.orm import Mapped, mapped_column, relationship
 
 if TYPE_CHECKING:
     from user_service.models.oauth_account import OAuthAccount
+    from user_service.models.user_profile import UserProfile
+    from user_service.models.taste_preference import TastePreference
 
 from user_service.db.base import Base
 
@@ -70,6 +72,17 @@ class User(Base):
     # Relationships
     oauth_accounts: Mapped[list["OAuthAccount"]] = relationship(
         "OAuthAccount",
+        back_populates="user",
+        lazy="selectin",
+    )
+    profile: Mapped[Optional["UserProfile"]] = relationship(
+        "UserProfile",
+        back_populates="user",
+        uselist=False,
+        lazy="selectin",
+    )
+    taste_preferences: Mapped[list["TastePreference"]] = relationship(
+        "TastePreference",
         back_populates="user",
         lazy="selectin",
     )
