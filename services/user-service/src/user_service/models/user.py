@@ -4,9 +4,14 @@ import enum
 from datetime import datetime
 from uuid import uuid4
 
+from typing import TYPE_CHECKING
+
 from sqlalchemy import DateTime, Enum, String, func
 from sqlalchemy.dialects.postgresql import UUID
-from sqlalchemy.orm import Mapped, mapped_column
+from sqlalchemy.orm import Mapped, mapped_column, relationship
+
+if TYPE_CHECKING:
+    from user_service.models.oauth_account import OAuthAccount
 
 from user_service.db.base import Base
 
@@ -35,9 +40,9 @@ class User(Base):
         nullable=False,
         index=True,
     )
-    password_hash: Mapped[str] = mapped_column(
+    password_hash: Mapped[str | None] = mapped_column(
         String(255),
-        nullable=False,
+        nullable=True,
     )
     status: Mapped[UserStatus] = mapped_column(
         Enum(UserStatus, name="user_status"),
@@ -60,6 +65,13 @@ class User(Base):
         DateTime(timezone=True),
         nullable=True,
         default=None,
+    )
+
+    # Relationships
+    oauth_accounts: Mapped[list["OAuthAccount"]] = relationship(
+        "OAuthAccount",
+        back_populates="user",
+        lazy="selectin",
     )
 
     def __repr__(self) -> str:

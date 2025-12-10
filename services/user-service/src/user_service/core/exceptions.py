@@ -141,6 +141,83 @@ class UserNotFoundError(ProblemDetail):
         )
 
 
+# OAuth Errors
+
+
+class OAuthError(ProblemDetail):
+    """Base OAuth error"""
+
+    def __init__(
+        self,
+        detail: str,
+        error_code: str = "oauth-error",
+        status: int = 400,
+        instance: str | None = None,
+    ):
+        super().__init__(
+            type_uri=f"{ERROR_BASE_URI}/oauth/{error_code}",
+            title="OAuth Error",
+            status=status,
+            detail=detail,
+            instance=instance,
+        )
+
+
+class OAuthStateError(ProblemDetail):
+    """OAuth state validation error (400)"""
+
+    def __init__(self, instance: str | None = None):
+        super().__init__(
+            type_uri=f"{ERROR_BASE_URI}/oauth/invalid-state",
+            title="Invalid OAuth State",
+            status=400,
+            detail="OAuth state가 유효하지 않거나 만료되었습니다. 다시 시도해주세요.",
+            instance=instance,
+        )
+
+
+class OAuthProviderError(ProblemDetail):
+    """OAuth provider error (502)"""
+
+    def __init__(self, provider: str, detail: str | None = None, instance: str | None = None):
+        super().__init__(
+            type_uri=f"{ERROR_BASE_URI}/oauth/provider-error",
+            title="OAuth Provider Error",
+            status=502,
+            detail=detail or f"{provider} 인증 서버와의 통신 중 오류가 발생했습니다.",
+            instance=instance,
+            extensions={"provider": provider},
+        )
+
+
+class OAuthAccountAlreadyLinkedError(ProblemDetail):
+    """OAuth account already linked to another user (409)"""
+
+    def __init__(self, provider: str, instance: str | None = None):
+        super().__init__(
+            type_uri=f"{ERROR_BASE_URI}/oauth/already-linked",
+            title="OAuth Account Already Linked",
+            status=409,
+            detail=f"이 {provider} 계정은 이미 다른 사용자에게 연결되어 있습니다.",
+            instance=instance,
+            extensions={"provider": provider},
+        )
+
+
+class UnsupportedOAuthProviderError(ProblemDetail):
+    """Unsupported OAuth provider error (400)"""
+
+    def __init__(self, provider: str, instance: str | None = None):
+        super().__init__(
+            type_uri=f"{ERROR_BASE_URI}/oauth/unsupported-provider",
+            title="Unsupported OAuth Provider",
+            status=400,
+            detail=f"지원하지 않는 OAuth 제공자입니다: {provider}",
+            instance=instance,
+            extensions={"provider": provider},
+        )
+
+
 async def problem_detail_exception_handler(
     request: Request, exc: ProblemDetail
 ) -> JSONResponse:

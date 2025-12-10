@@ -148,6 +148,8 @@ Co-Authored-By: Claude <noreply@anthropic.com>
 - PostgreSQL 15+ (pgvector), Redis 7+, Elasticsearch 8+ (001-project-setup)
 - Python 3.11+ + FastAPI 0.100+, python-jose, passlib[bcrypt], SQLAlchemy 2.0+, Pydantic 2.0+ (001-user-auth)
 - PostgreSQL 15+ (users 테이블), Redis 7+ (세션/블랙리스트) (001-user-auth)
+- Python 3.11+ + FastAPI 0.100+, SQLAlchemy, Pydantic, httpx (OAuth HTTP 클라이언트) (002-oauth-social-login)
+- PostgreSQL 15+ (user-service DB), Redis 7+ (세션/state 관리) (002-oauth-social-login)
 
 ## Recent Changes
 - 001-project-setup: Added Python 3.11+ + FastAPI 0.100+, SQLAlchemy 2.0+, Pydantic 2.0+, Alembic
