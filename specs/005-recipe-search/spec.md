@@ -2,7 +2,7 @@
 
 **Feature Branch**: `005-recipe-search`
 **Created**: 2025-12-10
-**Status**: Draft
+**Status**: Implemented
 **Input**: SPEC-005 - 원본 레시피 검색: 키워드 검색, 필터링, 정렬, 커서 기반 페이지네이션
 
 ---
@@ -208,6 +208,35 @@ GET /recipes/search
 | 400 | INVALID_SEARCH_QUERY | 검색어가 너무 길거나 유효하지 않은 파라미터 |
 | 400 | INVALID_SORT_OPTION | 유효하지 않은 정렬 옵션 |
 | 400 | INVALID_FILTER_VALUE | 유효하지 않은 필터 값 (음수 조리시간 등) |
+
+---
+
+## Clarifications
+
+**/speckit.clarify 실행 결과** (2025-12-10):
+
+스펙 검토 결과, 구현에 필요한 모든 정보가 충분히 정의되어 있습니다. 다음 사항들이 명확화되었습니다:
+
+### 확정된 구현 세부사항 (Phase 1 MVP)
+
+1. **검색 알고리즘**: PostgreSQL ILIKE '%keyword%' 부분 일치 검색
+   - 제목, 설명: 직접 ILIKE 검색
+   - 재료명: RecipeIngredient.name JOIN 후 ILIKE
+   - 요리사명: Chef.name JOIN 후 ILIKE
+   - 여러 필드 중 하나라도 매칭되면 결과에 포함 (OR 조건)
+
+2. **Relevance 정렬**: Phase 1에서는 `exposure_score DESC` 단순 정렬
+   - 추후 Phase 2에서 Elasticsearch 연동 시 BM25 기반 스코어링
+
+3. **태그 필터**: Phase 1은 단일 태그만 지원 (`tag=한식`)
+   - 다중 태그 필터 (OR/AND)는 Phase 2에서 구현
+
+4. **total_count**: 항상 `null` 반환 (성능 최적화)
+   - 커서 기반 페이지네이션에서는 전체 개수 불필요
+   - COUNT 쿼리 생략으로 성능 향상
+
+5. **재료명 검색**: 부분 일치 (ILIKE '%keyword%')
+   - RecipeIngredient.name 필드에서 검색
 
 ---
 

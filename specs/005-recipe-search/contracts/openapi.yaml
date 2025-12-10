@@ -1,0 +1,368 @@
+openapi: 3.0.3
+info:
+  title: Recipe Search API
+  description: 원본 레시피 검색 API (SPEC-005)
+  version: 1.0.0
+  contact:
+    name: Naecipe Backend Team
+
+servers:
+  - url: http://localhost:8001
+    description: Local Development
+  - url: https://api.naecipe.com
+    description: Production
+
+tags:
+  - name: Search
+    description: 레시피 검색 API
+
+paths:
+  /recipes/search:
+    get:
+      operationId: searchRecipes
+      summary: 레시피 검색
+      description: |
+        키워드, 필터, 정렬 조건으로 레시피를 검색합니다.
+
+        **검색 대상 필드**:
+        - 레시피 제목 (title)
+        - 레시피 설명 (description)
+        - 재료명 (ingredient name)
+        - 요리사명 (chef name)
+
+        **필터 조합**: 모든 필터는 AND 조건으로 적용됩니다.
+
+        **페이지네이션**: 커서 기반 무한 스크롤 지원
+      tags:
+        - Search
+      parameters:
+        - name: q
+          in: query
+          required: false
+          description: |
+            검색 키워드. 제목, 설명, 재료명, 요리사명에서 부분 일치 검색.
+            여러 필드 중 하나라도 일치하면 결과에 포함 (OR 조건).
+          schema:
+            type: string
+            maxLength: 100
+          example: "김치"
+
+        - name: difficulty
+          in: query
+          required: false
+          description: 난이도 필터
+          schema:
+            type: string
+            enum: [easy, medium, hard]
+          example: "easy"
+
+        - name: max_cook_time
+          in: query
+          required: false
+          description: 최대 조리시간 필터 (분). 해당 시간 이하인 레시피만 반환.
+          schema:
+            type: integer
+            minimum: 1
+            maximum: 1440
+          example: 30
+
+        - name: tag
+          in: query
+          required: false
+          description: 태그 필터. 해당 태그가 있는 레시피만 반환.
+          schema:
+            type: string
+            maxLength: 50
+          example: "한식"
+
+        - name: chef_id
+          in: query
+          required: false
+          description: 요리사 ID 필터. 해당 요리사의 레시피만 반환.
+          schema:
+            type: string
+            format: uuid
+          example: "550e8400-e29b-41d4-a716-446655440000"
+
+        - name: sort
+          in: query
+          required: false
+          description: |
+            정렬 기준
+            - `relevance` (기본값): 노출 점수 내림차순
+            - `latest`: 생성일 내림차순
+            - `cook_time`: 조리시간 오름차순
+            - `popularity`: 조회수 내림차순
+          schema:
+            type: string
+            enum: [relevance, latest, cook_time, popularity]
+            default: relevance
+          example: "relevance"
+
+        - name: cursor
+          in: query
+          required: false
+          description: 페이지네이션 커서. 이전 응답의 `next_cursor` 값.
+          schema:
+            type: string
+            maxLength: 200
+          example: "eyJzIjoicmVsZXZhbmNlIiwidiI6ODUuNSwiaSI6IjU1MGU4NDAwLWUyOWItNDFkNC1hNzE2LTQ0NjY1NTQ0MDAwMCJ9"
+
+        - name: limit
+          in: query
+          required: false
+          description: 반환할 결과 개수
+          schema:
+            type: integer
+            minimum: 1
+            maximum: 100
+            default: 20
+          example: 20
+
+      responses:
+        '200':
+          description: 검색 성공
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/SearchResult'
+              examples:
+                success:
+                  summary: 검색 결과
+                  value:
+                    items:
+                      - id: "550e8400-e29b-41d4-a716-446655440000"
+                        title: "김치찌개"
+                        description: "얼큰하고 맛있는 김치찌개"
+                        thumbnail_url: "https://images.naecipe.com/recipes/kimchi-jjigae.jpg"
+                        prep_time_minutes: 10
+                        cook_time_minutes: 30
+                        difficulty: "easy"
+                        exposure_score: 85.5
+                        chef:
+                          id: "660e8400-e29b-41d4-a716-446655440000"
+                          name: "백종원"
+                          profile_image_url: "https://images.naecipe.com/chefs/baek.jpg"
+                        tags:
+                          - id: "770e8400-e29b-41d4-a716-446655440000"
+                            name: "한식"
+                            category: "cuisine"
+                        created_at: "2025-01-01T00:00:00Z"
+                    next_cursor: "eyJzIjoicmVsZXZhbmNlIiwidiI6ODUuNSwiaS..."
+                    has_more: true
+                    total_count: null
+                empty:
+                  summary: 결과 없음
+                  value:
+                    items: []
+                    next_cursor: null
+                    has_more: false
+                    total_count: null
+
+        '400':
+          description: 잘못된 요청
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+              examples:
+                invalid_query:
+                  summary: 검색어 길이 초과
+                  value:
+                    error:
+                      code: "INVALID_SEARCH_QUERY"
+                      message: "검색어는 100자 이하여야 합니다."
+                      details:
+                        field: "q"
+                        max_length: 100
+                invalid_sort:
+                  summary: 잘못된 정렬 옵션
+                  value:
+                    error:
+                      code: "INVALID_SORT_OPTION"
+                      message: "유효하지 않은 정렬 옵션입니다."
+                      details:
+                        provided: "unknown"
+                        allowed: ["relevance", "latest", "cook_time", "popularity"]
+                invalid_filter:
+                  summary: 잘못된 필터 값
+                  value:
+                    error:
+                      code: "INVALID_FILTER_VALUE"
+                      message: "조리시간은 1분 이상이어야 합니다."
+                      details:
+                        field: "max_cook_time"
+                        min_value: 1
+
+        '500':
+          description: 서버 오류
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+              example:
+                error:
+                  code: "INTERNAL_SERVER_ERROR"
+                  message: "서버 오류가 발생했습니다."
+
+components:
+  schemas:
+    SearchResult:
+      type: object
+      description: 검색 결과 응답
+      required:
+        - items
+        - has_more
+      properties:
+        items:
+          type: array
+          description: 검색 결과 레시피 목록
+          items:
+            $ref: '#/components/schemas/SearchResultItem'
+        next_cursor:
+          type: string
+          nullable: true
+          description: 다음 페이지 요청을 위한 커서. null이면 마지막 페이지.
+          example: "eyJzIjoicmVsZXZhbmNlIiwidiI6ODUuNSwiaS..."
+        has_more:
+          type: boolean
+          description: 다음 페이지 존재 여부
+          example: true
+        total_count:
+          type: integer
+          nullable: true
+          description: 항상 null (성능 최적화를 위해 전체 개수 계산 생략)
+          example: null
+
+    SearchResultItem:
+      type: object
+      description: 검색 결과 레시피 아이템
+      required:
+        - id
+        - title
+        - exposure_score
+        - created_at
+      properties:
+        id:
+          type: string
+          format: uuid
+          description: 레시피 ID
+          example: "550e8400-e29b-41d4-a716-446655440000"
+        title:
+          type: string
+          description: 레시피 제목
+          example: "김치찌개"
+        description:
+          type: string
+          nullable: true
+          description: 레시피 설명
+          example: "얼큰하고 맛있는 김치찌개"
+        thumbnail_url:
+          type: string
+          nullable: true
+          description: 썸네일 이미지 URL
+          example: "https://images.naecipe.com/recipes/kimchi-jjigae.jpg"
+        prep_time_minutes:
+          type: integer
+          nullable: true
+          description: 준비 시간 (분)
+          example: 10
+        cook_time_minutes:
+          type: integer
+          nullable: true
+          description: 조리 시간 (분)
+          example: 30
+        difficulty:
+          type: string
+          nullable: true
+          enum: [easy, medium, hard]
+          description: 난이도
+          example: "easy"
+        exposure_score:
+          type: number
+          format: float
+          description: 노출 점수 (인기도)
+          example: 85.5
+        chef:
+          $ref: '#/components/schemas/ChefSummary'
+        tags:
+          type: array
+          description: 태그 목록
+          items:
+            $ref: '#/components/schemas/TagSummary'
+        created_at:
+          type: string
+          format: date-time
+          description: 생성일시
+          example: "2025-01-01T00:00:00Z"
+
+    ChefSummary:
+      type: object
+      nullable: true
+      description: 요리사 요약 정보 (검색 결과용)
+      required:
+        - id
+        - name
+      properties:
+        id:
+          type: string
+          format: uuid
+          description: 요리사 ID
+          example: "660e8400-e29b-41d4-a716-446655440000"
+        name:
+          type: string
+          description: 요리사 이름
+          example: "백종원"
+        profile_image_url:
+          type: string
+          nullable: true
+          description: 프로필 이미지 URL
+          example: "https://images.naecipe.com/chefs/baek.jpg"
+
+    TagSummary:
+      type: object
+      description: 태그 요약 정보 (검색 결과용)
+      required:
+        - id
+        - name
+        - category
+      properties:
+        id:
+          type: string
+          format: uuid
+          description: 태그 ID
+          example: "770e8400-e29b-41d4-a716-446655440000"
+        name:
+          type: string
+          description: 태그 이름
+          example: "한식"
+        category:
+          type: string
+          description: 태그 카테고리
+          example: "cuisine"
+
+    ErrorResponse:
+      type: object
+      description: 오류 응답
+      required:
+        - error
+      properties:
+        error:
+          type: object
+          required:
+            - code
+            - message
+          properties:
+            code:
+              type: string
+              description: 오류 코드
+              example: "INVALID_SEARCH_QUERY"
+            message:
+              type: string
+              description: 오류 메시지
+              example: "검색어는 100자 이하여야 합니다."
+            details:
+              type: object
+              nullable: true
+              description: 추가 오류 정보
+              additionalProperties: true

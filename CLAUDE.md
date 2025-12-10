@@ -158,6 +158,8 @@ Co-Authored-By: Claude <noreply@anthropic.com>
 - PostgreSQL 15+ (User DB), Redis 7+ (세션 캐시) (003-user-profile-preferences)
 - Python 3.11+ + FastAPI 0.100+, SQLAlchemy 2.0+, Pydantic 2.0+, redis[hiredis] (004-recipe-basic-crud)
 - PostgreSQL 15+ (Recipe DB), Redis 7+ (캐싱) (004-recipe-basic-crud)
+- Python 3.11+ + FastAPI 0.100+, SQLAlchemy, Pydantic, LangGraph (005-recipe-search)
+- PostgreSQL 15+ (pgvector), Redis Cluster 7+, Elasticsearch (005-recipe-search)
 
 ## Recent Changes
 - 001-project-setup: Added Python 3.11+ + FastAPI 0.100+, SQLAlchemy 2.0+, Pydantic 2.0+, Alembic

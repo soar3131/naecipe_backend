@@ -64,6 +64,9 @@ class RedisSettings(BaseSettings):
     REDIS_PASSWORD: SecretStr = SecretStr("")
     REDIS_DB: int = 0
 
+    # 검색 캐시 설정
+    SEARCH_CACHE_TTL: int = 300  # 5분
+
     @property
     def url(self) -> str:
         """Redis URL"""

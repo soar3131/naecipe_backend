@@ -13,6 +13,7 @@ from fastapi.middleware.cors import CORSMiddleware
 from recipe_service.api.chefs import router as chefs_router
 from recipe_service.api.health import router as health_router
 from recipe_service.api.recipes import router as recipes_router
+from recipe_service.api.search import router as search_router
 from recipe_service.core.config import settings
 from recipe_service.database import close_db
 from recipe_service.logging_config import setup_logging
@@ -68,6 +69,7 @@ setup_exception_handlers(app)
 app.include_router(health_router, tags=["Health"])
 app.include_router(recipes_router, tags=["Recipes"])
 app.include_router(chefs_router, tags=["Chefs"])
+app.include_router(search_router, tags=["Search"])
 
 
 @app.get("/")
