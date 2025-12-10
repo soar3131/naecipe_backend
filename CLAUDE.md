@@ -146,6 +146,8 @@ Co-Authored-By: Claude <noreply@anthropic.com>
 ## Active Technologies
 - Python 3.11+ + FastAPI 0.100+, SQLAlchemy 2.0+, Pydantic 2.0+, Alembic (001-project-setup)
 - PostgreSQL 15+ (pgvector), Redis 7+, Elasticsearch 8+ (001-project-setup)
+- Python 3.11+ + FastAPI 0.100+, python-jose, passlib[bcrypt], SQLAlchemy 2.0+, Pydantic 2.0+ (001-user-auth)
+- PostgreSQL 15+ (users 테이블), Redis 7+ (세션/블랙리스트) (001-user-auth)
 
 ## Recent Changes
 - 001-project-setup: Added Python 3.11+ + FastAPI 0.100+, SQLAlchemy 2.0+, Pydantic 2.0+, Alembic
