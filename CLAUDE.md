@@ -12,14 +12,14 @@
 
 > **중요**: 이 저장소는 **백엔드(서버) 코드만** 관리합니다. 프론트엔드, 모바일 앱, 인프라 코드는 별도 저장소에서 관리됩니다.
 
-- **역할**: REST API, gRPC 서비스, 이벤트 처리, AI 에이전트 등 서버 사이드 로직
+- **역할**: REST API, 도메인 모듈, 비동기 작업 처리, AI 에이전트 등 서버 사이드 로직
 - **Core Loop**: 검색 → 레시피 상세 → 조리/사용 → 피드백 입력 → AI 보정 → 보정 레시피 저장
-- **아키텍처**: Python FastAPI 기반 마이크로서비스 (9개 서비스)
+- **아키텍처**: Python FastAPI 기반 모듈러 모놀리스 (v2.0, 2025.12.10)
 - **워크플로우**: spec-kit 명세 기반 개발 (specify → clarify → plan → tasks → implement)
 
 ## Spec-Kit 워크플로우 명령어
 
-> **⚠️ 중요**: 스펙 생성 전 **반드시** `SPECKIT_TODO.md`를 먼저 참조하세요. 이 문서에는 전체 스펙 목록(SPEC-000~021), 도메인 용어 정의, ERD, Kafka 이벤트, 캐시 전략, 보안 요구사항 등이 정의되어 있습니다.
+> **⚠️ 중요**: 스펙 생성 전 **반드시** `SPECKIT_TODO.md`를 먼저 참조하세요. 이 문서에는 전체 스펙 목록(SPEC-000~021), 도메인 용어 정의, ERD, 비동기 이벤트, 캐시 전략, 보안 요구사항 등이 정의되어 있습니다.
 
 `.claude/commands/`에 정의된 슬래시 명령어들:
 
@@ -59,12 +59,12 @@ specs/[###-feature-name]/
 
 | 원칙 | 핵심 내용 |
 |------|----------|
-| I. API-First | OpenAPI/gRPC 명세 먼저, 구현 나중 |
-| II. Microservice | 도메인별 DB 분리, 독립 배포 가능 |
+| I. API-First | OpenAPI 명세 먼저, 구현 나중 |
+| II. Modular Monolith | 도메인 모듈 분리, 스키마 분리 (단일 PostgreSQL) |
 | III. TDD | Contract/Integration 테스트 필수 |
-| IV. Event-Driven | Kafka 기반 비동기 이벤트 전파 |
+| IV. Async Task | BackgroundTasks 기반 비동기 처리 |
 | V. Security | OWASP Top 10 대응, Pydantic 검증 |
-| VI. Observability | 구조화 로깅, 분산 추적, 메트릭 |
+| VI. Observability | 구조화 로깅 (CloudWatch), 메트릭 |
 | VII. Simplicity | YAGNI, 최소 추상화 |
 
 ## 기술 스택
@@ -72,27 +72,38 @@ specs/[###-feature-name]/
 | 구분 | 기술 |
 |------|------|
 | Backend | Python 3.11+, FastAPI |
-| Database | PostgreSQL 15+ (pgvector), Redis 7+ |
-| Message Queue | Apache Kafka 3.5+ |
+| Database | PostgreSQL 15+ (pgvector, 스키마 분리), Redis 7+ |
+| Async Processing | FastAPI BackgroundTasks (필요 시 SQS) |
 | AI Agent | LangGraph + OpenAI/Anthropic |
-| Infrastructure | AWS EKS, Terraform |
+| Infrastructure | AWS ECS Fargate, CloudWatch |
 
-## 서비스 구조
+## 프로젝트 구조 (모듈러 모놀리스 v2.0)
 
 ```
-services/
-├── recipe-service (8001)      # 레시피 CRUD, 검색
-├── user-service (8002)        # 인증, 사용자 관리
-├── cookbook-service (8003)    # 레시피북, 피드백
-├── ai-agent-service (8004)    # AI 보정/Q&A
-├── embedding-service (8005)   # 벡터 임베딩
-├── search-service (8006)      # Elasticsearch
-├── notification-service (8007)# 알림
-├── analytics-service (8008)   # 이벤트 집계
-└── ingestion-service (8009)   # 크롤링 레시피 수신
+app/                           # 단일 FastAPI 앱
+├── core/                      # 공유 설정, 보안, 의존성
+│   ├── config.py
+│   ├── security.py
+│   └── dependencies.py
+├── infra/                     # 인프라 레이어 (DB, Redis, S3)
+│   ├── database.py
+│   ├── redis.py
+│   └── s3.py
+├── recipes/                   # 레시피 도메인 모듈
+│   ├── models.py
+│   ├── schemas.py
+│   ├── services.py
+│   └── router.py
+├── users/                     # 사용자 도메인 모듈
+├── cookbooks/                 # 레시피북/피드백 모듈
+├── ai_agent/                  # AI 보정 모듈
+├── knowledge/                 # 임베딩/검색 모듈
+├── notifications/             # 알림 모듈
+├── analytics/                 # 분석 모듈
+├── ingestion/                 # 크롤링 수신 모듈
+└── main.py                    # FastAPI 앱 진입점
 
 shared/
-├── proto/      # gRPC 정의
 ├── schemas/    # 공통 Pydantic 모델
 └── utils/      # 공통 유틸리티
 ```
@@ -136,9 +147,9 @@ Co-Authored-By: Claude <noreply@anthropic.com>
 ```bash
 feat(001-project-setup): 백엔드 프로젝트 기반 구조 설정
 
-- 9개 마이크로서비스 구조 생성
+- 모듈러 모놀리스 구조 생성 (app/ + 8개 도메인 모듈)
 - Docker Compose 인프라 설정
-- shared 패키지 (schemas, utils, proto)
+- shared 패키지 (schemas, utils)
 - Alembic 마이그레이션 설정
 - GitHub Actions CI 워크플로우
 
@@ -147,19 +158,20 @@ Co-Authored-By: Claude <noreply@anthropic.com>
 ```
 
 ## Active Technologies
-- Python 3.11+ + FastAPI 0.100+, SQLAlchemy 2.0+, Pydantic 2.0+, Alembic (001-project-setup)
-- PostgreSQL 15+ (pgvector), Redis 7+, Elasticsearch 8+ (001-project-setup)
-- Python 3.11+ + FastAPI 0.100+, python-jose, passlib[bcrypt], SQLAlchemy 2.0+, Pydantic 2.0+ (001-user-auth)
-- PostgreSQL 15+ (users 테이블), Redis 7+ (세션/블랙리스트) (001-user-auth)
-- Python 3.11+ + FastAPI 0.100+, SQLAlchemy, Pydantic, httpx (OAuth HTTP 클라이언트) (002-oauth-social-login)
-- PostgreSQL 15+ (user-service DB), Redis 7+ (세션/state 관리) (002-oauth-social-login)
-- Python 3.11+ + FastAPI 0.100+, SQLAlchemy, Pydantic, redis[hiredis] (003-recipe-basic-crud)
-- PostgreSQL 15+ (Recipe DB), Redis 7+ (캐시) (003-recipe-basic-crud)
-- PostgreSQL 15+ (User DB), Redis 7+ (세션 캐시) (003-user-profile-preferences)
-- Python 3.11+ + FastAPI 0.100+, SQLAlchemy 2.0+, Pydantic 2.0+, redis[hiredis] (004-recipe-basic-crud)
-- PostgreSQL 15+ (Recipe DB), Redis 7+ (캐싱) (004-recipe-basic-crud)
-- Python 3.11+ + FastAPI 0.100+, SQLAlchemy, Pydantic, LangGraph (005-recipe-search)
-- PostgreSQL 15+ (pgvector), Redis Cluster 7+, Elasticsearch (005-recipe-search)
+
+**Core Stack (모듈러 모놀리스)**:
+- Python 3.11+ + FastAPI 0.100+
+- SQLAlchemy 2.0+ + Pydantic 2.0+ + Alembic
+- PostgreSQL 15+ (단일 DB, 스키마 분리, pgvector)
+- Redis 7+ (단일 인스턴스, 세션/캐시)
+
+**모듈별 추가 기술**:
+- users: python-jose, passlib[bcrypt], httpx (OAuth)
+- recipes: redis[hiredis] (캐싱)
+- ai_agent: LangGraph (예정)
 
 ## Recent Changes
-- 001-project-setup: Added Python 3.11+ + FastAPI 0.100+, SQLAlchemy 2.0+, Pydantic 2.0+, Alembic
+- 006-modular-monolith-refactoring: 마이크로서비스 → 모듈러 모놀리스 전환
+  - 9개 독립 서비스 → 단일 FastAPI 앱 (8개 도메인 모듈)
+  - Kafka/Zookeeper 제거 → FastAPI BackgroundTasks
+  - 분리 DB → 단일 PostgreSQL (스키마 분리)

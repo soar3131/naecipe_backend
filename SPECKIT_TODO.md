@@ -8,19 +8,26 @@
 
 **프로젝트**: 내시피(Naecipe) - AI 기반 맞춤형 레시피 보정 서비스
 **Core Loop**: 검색 → 레시피 상세 → 조리/사용 → 피드백 입력 → AI 보정 → 보정 레시피 저장
+**아키텍처**: 모듈러 모놀리스 (v2.0, 2025.12.10)
 
-**백엔드 서비스 목록** (FastAPI 기반):
-| 서비스 | 포트 | 역할 |
-|--------|------|------|
-| Recipe Service | 8001 | 원본 레시피 CRUD, 검색 |
-| User Service | 8002 | 인증, 사용자 관리 |
-| Cookbook Service | 8003 | 레시피북, 저장된 레시피, 피드백, 보정 레시피 |
-| AI Agent Service | 8004 | LangGraph 기반 AI 처리 |
-| Embedding Service | 8005 | 벡터 임베딩 생성 |
-| Search Service | 8006 | Elasticsearch 연동 |
-| Notification Service | 8007 | 푸시, 이메일 발송 |
-| Analytics Service | 8008 | 이벤트 집계, 통계 |
-| Recipe Ingestion Service | 8009 | 크롤링 레시피 수신, 중복 검사 |
+**백엔드 모듈 목록** (단일 FastAPI 앱 내 도메인 모듈):
+| 모듈 | 경로 | 역할 |
+|------|------|------|
+| recipes | `app/recipes/` | 원본 레시피 CRUD, 검색 |
+| users | `app/users/` | 인증, 사용자 관리 |
+| cookbooks | `app/cookbooks/` | 레시피북, 저장된 레시피, 피드백, 보정 레시피 |
+| ai_agent | `app/ai_agent/` | LangGraph 기반 AI 처리 |
+| knowledge | `app/knowledge/` | 벡터 임베딩, 검색 |
+| notifications | `app/notifications/` | 푸시, 이메일 발송 |
+| analytics | `app/analytics/` | 이벤트 집계, 통계 |
+| ingestion | `app/ingestion/` | 크롤링 레시피 수신, 중복 검사 |
+
+> **⚠️ v2.0 변경 (2025.12.10)**
+> - 9개 독립 서비스 → 1개 앱 + 8개 도메인 모듈
+> - 5개 PostgreSQL → 1개 PostgreSQL (스키마 분리: recipes, users, cookbooks, knowledge)
+> - gRPC → Python 함수 호출
+> - Kafka → BackgroundTasks (필요시 SQS)
+> - EKS → ECS Fargate
 
 ---
 
@@ -56,7 +63,7 @@
 
 ```
 ┌─────────────────────────────────────────────────────────────────────┐
-│                        Recipe Service (8001)                         │
+│                        app/recipes/ 모듈                             │
 │  ┌─────────────────────────────────────────────────────────────────┐ │
 │  │  원본 레시피 (Original Recipe)                                   │ │
 │  │  - 크롤링/수집된 레시피 데이터                                    │ │
@@ -65,10 +72,10 @@
 │  └─────────────────────────────────────────────────────────────────┘ │
 └─────────────────────────────────────────────────────────────────────┘
                                     │
-                                    │ 저장
+                                    │ 저장 (Python 함수 호출)
                                     ▼
 ┌─────────────────────────────────────────────────────────────────────┐
-│                       Cookbook Service (8003)                        │
+│                       app/cookbooks/ 모듈                            │
 │  ┌─────────────────┐    ┌─────────────────┐    ┌─────────────────┐  │
 │  │   레시피북       │    │   저장된 레시피   │    │   보정 레시피    │  │
 │  │   (Cookbook)    │───▶│  (Saved Recipe) │───▶│ (Adjusted Recipe)│  │
@@ -82,7 +89,7 @@
 │                                    ▼                    │           │
 │                         ┌─────────────────┐             │           │
 │                         │   조리 피드백    │─────────────┘           │
-│                         │(Cooking Feedback)│   AI 보정 요청          │
+│                         │(Cooking Feedback)│  BackgroundTasks 호출   │
 │                         └─────────────────┘                         │
 └─────────────────────────────────────────────────────────────────────┘
 ```
@@ -104,10 +111,10 @@
 
 ---
 
-### Phase 1: Core Services (핵심 서비스)
+### Phase 1: Core Modules (핵심 모듈)
 
-#### 1-1. User Service (인증/사용자 - 최우선)
-> 모든 서비스가 인증에 의존하므로 가장 먼저 구현
+#### 1-1. Users 모듈 (인증/사용자 - 최우선)
+> 모든 모듈이 인증에 의존하므로 가장 먼저 구현
 
 - [x] **SPEC-001**: 사용자 인증 기본
   - 이메일 회원가입 / 로그인
@@ -133,7 +140,7 @@
 
 ---
 
-#### 1-2. Recipe Service (원본 레시피 - Core Loop 시작점)
+#### 1-2. Recipes 모듈 (원본 레시피 - Core Loop 시작점)
 > 크롤링으로 수집된 **원본 레시피** 관리. 검색과 상세 조회가 Core Loop의 시작.
 
 - [x] **SPEC-004**: 원본 레시피 기본 CRUD
@@ -169,7 +176,7 @@
   - Cursor 기반 페이지네이션 (무한 스크롤 지원)
   - **검색 결과**: 레시피 목록에 `chef` 정보 포함 (id, name, profile_image_url)
   - **관련 API**: `GET /recipes/search`
-  - **연동**: Search Service (Elasticsearch - chef_name 인덱싱)
+  - **연동**: Knowledge 모듈 (Elasticsearch - chef_name 인덱싱)
   - **캐시**: 검색 결과 캐싱 (Redis, TTL 5분)
   - **⚠️ chefs 테이블 의존**: SPEC-004 완료 필요
 
@@ -181,12 +188,12 @@
   - **관련 API**:
     - `GET /recipes/:id/similar` - 유사 레시피 (기존)
     - `GET /recipes/:id/same-chef` - 같은 요리사 레시피 (추가)
-  - **연동**: Embedding Service (벡터 유사도)
+  - **연동**: Knowledge 모듈 (벡터 유사도)
   - **⚠️ chefs 테이블 의존**: SPEC-004 완료 필요
 
 ---
 
-#### 1-3. Cookbook Service (레시피북 - Core Loop 저장 및 보정)
+#### 1-3. Cookbooks 모듈 (레시피북 - Core Loop 저장 및 보정)
 > 사용자별 레시피 저장, 조리 기록, 피드백, **보정 레시피** 관리
 
 - [ ] **SPEC-007**: 레시피북 기본 CRUD
@@ -223,7 +230,7 @@
     - 난이도 평점 (1-5)
     - 텍스트 리뷰
     - **보정 요청** (옵션): "더 달게", "양을 줄여서", "덜 맵게" 등
-  - 피드백 제출 시 AI 보정 요청 트리거 (Kafka 이벤트)
+  - 피드백 제출 시 AI 보정 요청 트리거 (BackgroundTasks)
   - **관련 API**:
     - `POST /cookbooks/:cookbookId/recipes/:savedRecipeId/cook/start` - 조리 시작
     - `POST /cookbooks/:cookbookId/recipes/:savedRecipeId/cook/complete` - 조리 완료
@@ -232,7 +239,7 @@
   - **DB 테이블**:
     - `cooking_records` (saved_recipe_id, started_at, completed_at, actual_duration)
     - `cooking_feedbacks` (cooking_record_id, taste_rating, difficulty_rating, review, adjustment_request)
-  - **이벤트**: `FeedbackSubmitted` → Kafka → AI Agent Service
+  - **비동기 처리**: `FeedbackSubmitted` → BackgroundTasks → AI Agent 모듈
 
 - [ ] **SPEC-010**: 보정 레시피 및 버전 관리
   - **보정 레시피**: AI가 피드백 기반으로 생성한 개인화된 레시피
@@ -255,9 +262,9 @@
 
 ---
 
-### Phase 2: AI Services (AI 서비스)
+### Phase 2: AI Modules (AI 모듈)
 
-#### 2-1. AI Agent Service (핵심 AI 기능)
+#### 2-1. AI Agent 모듈 (핵심 AI 기능)
 > Core Loop의 핵심 - 피드백 기반 레시피 보정
 
 - [ ] **SPEC-011**: AI 보정 에이전트 (Adjustment Agent)
@@ -270,13 +277,13 @@
     6. 보정 레시피 생성
     7. 검증 (영양 균형, 조리 가능성)
   - OpenAI GPT-4 + Claude Fallback
-  - **이벤트 소비**: `FeedbackSubmitted` (Kafka)
-  - **이벤트 발행**: `AdjustmentCompleted` (Kafka)
+  - **비동기 처리**: `FeedbackSubmitted` → BackgroundTasks로 호출됨
+  - **완료 콜백**: `AdjustmentCompleted` → 직접 함수 호출
   - **관련 API**:
     - `GET /ai/adjustments/:id` - 보정 요청 상태 조회
     - `GET /ai/adjustments/:id/result` - 보정 결과 조회
   - **DB 테이블**: `adjustment_requests` (status, input_feedback, output_recipe, llm_trace)
-  - **연동**: Cookbook Service (보정 레시피 저장)
+  - **연동**: Cookbooks 모듈 (보정 레시피 저장)
 
 - [ ] **SPEC-012**: Q&A 에이전트 (Q&A Agent)
   - 조리 중 질문 응답
@@ -295,9 +302,9 @@
 
 ---
 
-#### 2-2. Embedding Service (벡터 임베딩)
+#### 2-2. Knowledge 모듈 (벡터 임베딩 & 검색)
 
-- [ ] **SPEC-013**: 벡터 임베딩 서비스
+- [ ] **SPEC-013**: 벡터 임베딩 기능
   - 레시피 청킹 전략:
     - 개요 청크 (제목, 설명, 태그)
     - 재료 청크 (재료 목록)
@@ -306,16 +313,16 @@
   - pgvector 저장 및 유사도 검색
   - 배치 임베딩 생성 (새 레시피 등록 시)
   - **DB 테이블**: `recipe_embeddings` (recipe_id, chunk_type, embedding vector)
-  - **연동**: pgvector, Recipe Ingestion Service
+  - **연동**: pgvector, Ingestion 모듈
 
 ---
 
-### Phase 3: Support Services (지원 서비스)
+### Phase 3: Support Modules (지원 모듈)
 
-#### 3-1. Search Service (검색)
+#### 3-1. Knowledge 모듈 - Elasticsearch 검색
 
-- [ ] **SPEC-014**: Elasticsearch 검색 서비스
-  - 원본 레시피 인덱싱 (Recipe Service 연동)
+- [ ] **SPEC-014**: Elasticsearch 검색 기능
+  - 원본 레시피 인덱싱 (Recipes 모듈 연동)
   - **인덱스 필드** (chefs 테이블 추가로 확장):
     - `title`, `description`, `ingredients.name` (기존)
     - `chef_id`, `chef_name` (추가) - 요리사 검색/필터용
@@ -326,15 +333,15 @@
   - 자동완성 (edge ngram) - 요리사명 포함
   - 검색어 추천 (did-you-mean)
   - **연동**: Elasticsearch 8+
-  - **이벤트 소비**: `RecipeCreated`, `RecipeUpdated`, `ChefUpdated` (인덱스 동기화)
+  - **동기화**: 레시피 생성/수정 시 직접 호출로 인덱스 동기화
   - **⚠️ chefs 테이블 의존**: SPEC-004 완료 필요
 
 ---
 
-#### 3-2. Recipe Ingestion Service (레시피 수집)
+#### 3-2. Ingestion 모듈 (레시피 수집)
 
 - [ ] **SPEC-015**: 레시피 수집 API
-  - 크롤링된 레시피 수신 (Crawler Bot → Ingestion Service)
+  - 크롤링된 레시피 수신 (Crawler Bot → Ingestion 모듈)
   - **요리사 자동 매칭/생성**:
     - 크롤러가 전달한 `author_name` + `platform` 정보로 `chefs` 테이블 조회
     - 동일 요리사 존재 시: `chef_id` 매핑
@@ -354,27 +361,27 @@
     - `PATCH /ingestion/recipes/:id/scores` - 스코어 업데이트
     - `POST /ingestion/chefs` - 요리사 수동 등록 (추가)
   - **DB 테이블**: `recipe_sources`, `recipe_score_history`, **`chefs`, `chef_platforms`**
-  - **이벤트 발행**: `RecipeCreated`, `ChefCreated` → Kafka
+  - **후처리**: 레시피 생성 시 Knowledge 모듈 (Elasticsearch/임베딩) 동기화
   - **⚠️ chefs 테이블 필수**: SPEC-004 완료 필요
 
 ---
 
-#### 3-3. Notification Service (알림)
+#### 3-3. Notifications 모듈 (알림)
 
-- [ ] **SPEC-016**: 알림 서비스
+- [ ] **SPEC-016**: 알림 기능
   - AI 보정 완료 알림
   - 푸시 알림 (FCM)
   - 이메일 알림 (선택적)
   - 알림 설정 관리
-  - **이벤트 소비**: `AdjustmentCompleted` (Kafka)
+  - **비동기 처리**: AI 보정 완료 시 BackgroundTasks로 호출
   - **DB 테이블**: `notifications`, `notification_settings`
 
 ---
 
-#### 3-4. Analytics Service (분석)
+#### 3-4. Analytics 모듈 (분석)
 
 - [ ] **SPEC-017**: 이벤트 수집 및 분석
-  - 이벤트 수신 (Kafka)
+  - 이벤트 수신 (BackgroundTasks로 호출)
   - TimescaleDB 저장
   - 일별/주별 집계:
     - 레시피별 조회수, 저장수, 조리 완료수
@@ -915,17 +922,19 @@ erDiagram
 
 ---
 
-## Kafka 이벤트 흐름
+## 비동기 이벤트 처리 (BackgroundTasks)
 
-### 토픽 정의
+> **v2.0 변경**: Kafka 토픽 기반 이벤트 버스 → FastAPI BackgroundTasks + Python 함수 호출
+> 대용량/내구성 필요 시 AWS SQS 사용 검토 (DAU 10만+ 시)
 
-| 토픽 | 파티션 | 발행자 | 소비자 | 용도 |
-|------|--------|--------|--------|------|
-| `recipe.events` | 6 | Recipe Service, Ingestion Service | Search Service, Analytics, Embedding | 레시피 생성/수정/삭제 |
-| `user.events` | 3 | User Service | AI Agent, Analytics | 사용자 관련 이벤트 |
-| `cookbook.events` | 6 | Cookbook Service | AI Agent, Analytics | 레시피북/저장 이벤트 |
-| `feedback.events` | 6 | Cookbook Service | AI Agent, Analytics, Notification | 피드백 제출 이벤트 |
-| `ai.events` | 3 | AI Agent Service | Cookbook, Analytics, Notification, Cache Invalidator | AI 처리 완료 이벤트 |
+### 이벤트 처리 매핑
+
+| 이벤트 | 발생 모듈 | 처리 모듈 | 용도 |
+|--------|----------|----------|------|
+| `RecipeCreated` | Ingestion | Knowledge (Elasticsearch/Embedding), Analytics | 레시피 생성 시 인덱싱 |
+| `UserPreferenceUpdated` | Users | AI Agent (캐시 갱신), Analytics | 취향 변경 시 |
+| `FeedbackSubmitted` | Cookbooks | AI Agent, Analytics, Notifications | 피드백 제출 시 AI 보정 트리거 |
+| `AdjustmentCompleted` | AI Agent | Cookbooks, Analytics, Notifications | AI 보정 완료 시 |
 
 ### 핵심 이벤트 스키마
 
@@ -1000,30 +1009,32 @@ erDiagram
 sequenceDiagram
     autonumber
     participant User as 👤 User
-    participant Cookbook as 📚 Cookbook Service
-    participant Kafka as 📨 Kafka
-    participant AI as 🤖 AI Agent Service
-    participant Notify as 🔔 Notification Service
-    participant Analytics as 📊 Analytics Service
+    participant API as 🌐 FastAPI App
+    participant Cookbooks as 📚 Cookbooks 모듈
+    participant BG as ⚙️ BackgroundTasks
+    participant AI as 🤖 AI Agent 모듈
+    participant Notify as 🔔 Notifications 모듈
+    participant Analytics as 📊 Analytics 모듈
 
-    Note over User, Analytics: Core Loop - 피드백 → AI 보정 → 알림
+    Note over User, Analytics: Core Loop - 피드백 → AI 보정 → 알림 (모놀리스 내부)
 
-    User->>Cookbook: 조리 피드백 제출
-    Cookbook->>Cookbook: 피드백 저장
-    Cookbook->>Kafka: FeedbackSubmitted 발행
+    User->>API: 조리 피드백 제출
+    API->>Cookbooks: 피드백 저장
+    Cookbooks->>BG: FeedbackSubmitted (비동기)
+    API-->>User: 202 Accepted
 
-    par 병렬 처리
-        Kafka->>AI: FeedbackSubmitted 소비
-        Kafka->>Analytics: FeedbackSubmitted 소비
+    par BackgroundTasks 병렬 처리
+        BG->>AI: process_feedback()
+        BG->>Analytics: log_feedback()
     end
 
     AI->>AI: 보정 레시피 생성
-    AI->>Cookbook: 보정 레시피 저장 (gRPC)
-    AI->>Kafka: AdjustmentCompleted 발행
+    AI->>Cookbooks: save_adjusted_recipe() (동기)
+    AI->>BG: AdjustmentCompleted (비동기)
 
-    par 병렬 처리
-        Kafka->>Notify: AdjustmentCompleted 소비
-        Kafka->>Analytics: AdjustmentCompleted 소비
+    par BackgroundTasks 병렬 처리
+        BG->>Notify: send_notification()
+        BG->>Analytics: log_adjustment()
     end
 
     Notify->>User: 푸시 알림 발송
@@ -1059,21 +1070,23 @@ sequenceDiagram
 
 ---
 
-## 서비스 간 통신
+## 모듈 간 통신
 
-### 동기 통신 (gRPC)
+> **v2.0 변경**: gRPC 서비스 간 통신 → Python 함수 직접 호출
 
-| 호출자 | 피호출자 | 메서드 | 용도 |
-|--------|----------|--------|------|
-| Cookbook Service | Recipe Service | `GetRecipe(id)` | 원본 레시피 상세 조회 |
-| AI Agent Service | Recipe Service | `GetRecipe(id)` | 보정용 레시피 조회 |
-| AI Agent Service | User Service | `GetUserPreferences(userId)` | 사용자 취향 조회 |
-| AI Agent Service | Cookbook Service | `SaveAdjustedRecipe(data)` | 보정 레시피 저장 |
-| Search Service | Recipe Service | `GetRecipes(ids)` | 검색 결과 상세 조회 |
+### 동기 통신 (Python 함수 호출)
 
-### 비동기 통신 (Kafka)
+| 호출 모듈 | 피호출 모듈 | 함수 | 용도 |
+|----------|-----------|------|------|
+| Cookbooks | Recipes | `recipes.services.get_recipe(id)` | 원본 레시피 상세 조회 |
+| AI Agent | Recipes | `recipes.services.get_recipe(id)` | 보정용 레시피 조회 |
+| AI Agent | Users | `users.services.get_user_preferences(userId)` | 사용자 취향 조회 |
+| AI Agent | Cookbooks | `cookbooks.services.save_adjusted_recipe(data)` | 보정 레시피 저장 |
+| Knowledge | Recipes | `recipes.services.get_recipes(ids)` | 검색 결과 상세 조회 |
 
-위 "Kafka 이벤트 흐름" 섹션 참조
+### 비동기 통신 (BackgroundTasks)
+
+위 "비동기 이벤트 처리" 섹션 참조
 
 ---
 
@@ -1117,29 +1130,38 @@ sequenceDiagram
 
 ## 인프라 리소스
 
+> **v2.0 변경**: EKS + 다중 인스턴스 → ECS Fargate 단일 컨테이너
+> 비용 절감: 월 ~$800 → ~$150 (약 80% 절감)
+
 ### AWS 리소스 명세
 
 | 서비스 | 스펙 | 수량 | 용도 |
 |--------|------|------|------|
-| EKS | 1.29 | 1 | Kubernetes 클러스터 |
-| EC2 (General) | m6i.xlarge | 3-10 | 일반 워크로드 |
-| EC2 (AI) | c6i.2xlarge | 2-5 | AI Agent 워크로드 |
-| RDS PostgreSQL | db.r6g.xlarge | 5 | 도메인별 DB |
-| ElastiCache Redis | r6g.large | 6 | 캐시 클러스터 |
-| MSK Kafka | kafka.m5.large | 3 | 메시지 브로커 |
+| ECS Fargate | 2 vCPU, 4GB | 1-3 | FastAPI 앱 (Auto Scaling) |
+| RDS PostgreSQL | db.t4g.medium | 1 | 단일 DB (스키마 분리) |
+| ElastiCache Redis | cache.t4g.micro | 1 | 캐시 (단일 인스턴스) |
+| ~~MSK Kafka~~ | - | - | 제거됨 (BackgroundTasks 사용) |
 | S3 | Standard | - | 정적 파일, 백업 |
 | CloudFront | - | 1 | CDN |
+| CloudWatch | - | - | 로그, 메트릭, 알람 |
+| ALB | - | 1 | 로드 밸런서 |
 
-### Kubernetes 네임스페이스
+### ECS 서비스 구성
 
-| 네임스페이스 | 용도 |
-|-------------|------|
-| `kube-system` | CoreDNS, Metrics Server |
-| `ingress-nginx` | NGINX Ingress Controller |
-| `monitoring` | Prometheus, Grafana, Loki |
-| `naecipe-prod` | 프로덕션 서비스 |
-| `naecipe-staging` | 스테이징 서비스 |
-| `naecipe-crawler` | 크롤러 봇 (CronJob) |
+| 서비스 | 컨테이너 | 포트 | 용도 |
+|--------|----------|------|------|
+| `naecipe-api` | FastAPI 앱 | 8000 | 메인 API 서버 |
+| `naecipe-worker` | Celery (선택) | - | 장시간 작업 (필요 시) |
+| `naecipe-scheduler` | CronJob | - | 배치 작업 (통계 집계 등) |
+
+### 스키마 분리 (단일 PostgreSQL)
+
+| 스키마 | 도메인 모듈 | 주요 테이블 |
+|--------|-----------|------------|
+| `recipes` | recipes, ingestion | recipes, chefs, tags |
+| `users` | users | users, profiles, preferences |
+| `cookbooks` | cookbooks | cookbooks, saved_recipes, feedbacks |
+| `knowledge` | knowledge, ai_agent | embeddings, qa_sessions |
 
 ---
 
