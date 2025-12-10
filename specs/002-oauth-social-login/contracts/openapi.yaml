@@ -1,0 +1,212 @@
+openapi: 3.0.3
+info:
+  title: User Service - OAuth API
+  description: OAuth 소셜 로그인 API (카카오, 구글, 네이버)
+  version: 1.0.0
+  contact:
+    name: Naecipe Backend Team
+
+servers:
+  - url: http://localhost:8002
+    description: Development server
+  - url: https://api.naecipe.com
+    description: Production server
+
+tags:
+  - name: OAuth
+    description: OAuth 소셜 로그인 관련 API
+
+paths:
+  /v1/auth/oauth/{provider}:
+    get:
+      tags:
+        - OAuth
+      summary: OAuth Authorization URL 조회
+      description: |
+        소셜 로그인을 위한 Authorization URL을 반환합니다.
+        프론트엔드에서 이 URL로 리다이렉트하여 OAuth 인증을 시작합니다.
+      operationId: getOAuthAuthorizationUrl
+      parameters:
+        - name: provider
+          in: path
+          required: true
+          description: 소셜 로그인 제공자
+          schema:
+            $ref: '#/components/schemas/OAuthProvider'
+        - name: redirect_uri
+          in: query
+          required: false
+          description: 인증 완료 후 리다이렉트할 URI (기본값 사용 시 생략)
+          schema:
+            type: string
+            format: uri
+      responses:
+        '200':
+          description: Authorization URL 반환 성공
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/OAuthAuthorizationResponse'
+        '400':
+          description: 지원하지 않는 제공자
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+
+  /v1/auth/oauth/{provider}/callback:
+    post:
+      tags:
+        - OAuth
+      summary: OAuth 콜백 처리
+      description: |
+        OAuth 제공자로부터 받은 authorization code를 처리하고 JWT 토큰을 발급합니다.
+        신규 사용자인 경우 자동으로 계정을 생성하고, 기존 사용자인 경우 로그인 처리합니다.
+      operationId: handleOAuthCallback
+      parameters:
+        - name: provider
+          in: path
+          required: true
+          description: 소셜 로그인 제공자
+          schema:
+            $ref: '#/components/schemas/OAuthProvider'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/OAuthCallbackRequest'
+      responses:
+        '200':
+          description: 로그인 성공 (기존 사용자)
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/OAuthLoginResponse'
+        '201':
+          description: 회원가입 및 로그인 성공 (신규 사용자)
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/OAuthLoginResponse'
+        '400':
+          description: 잘못된 요청 (state 검증 실패, 코드 교환 실패 등)
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+        '502':
+          description: 소셜 제공자 서버 오류
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+
+components:
+  schemas:
+    OAuthProvider:
+      type: string
+      enum:
+        - kakao
+        - google
+        - naver
+      description: OAuth 제공자
+
+    OAuthAuthorizationResponse:
+      type: object
+      required:
+        - authorization_url
+        - state
+      properties:
+        authorization_url:
+          type: string
+          format: uri
+          description: 소셜 로그인 페이지 URL
+          example: "https://kauth.kakao.com/oauth/authorize?client_id=...&state=..."
+        state:
+          type: string
+          description: CSRF 방지용 state 토큰
+          example: "abc123def456..."
+
+    OAuthCallbackRequest:
+      type: object
+      required:
+        - code
+        - state
+      properties:
+        code:
+          type: string
+          description: OAuth authorization code
+          example: "authorization_code_from_provider"
+        state:
+          type: string
+          description: CSRF 방지용 state 토큰 (Authorization URL 요청 시 받은 값)
+          example: "abc123def456..."
+
+    OAuthLoginResponse:
+      type: object
+      required:
+        - access_token
+        - refresh_token
+        - token_type
+        - expires_in
+        - user
+        - is_new_user
+      properties:
+        access_token:
+          type: string
+          description: JWT Access Token
+        refresh_token:
+          type: string
+          description: JWT Refresh Token
+        token_type:
+          type: string
+          enum:
+            - bearer
+          description: 토큰 타입
+        expires_in:
+          type: integer
+          description: Access Token 만료 시간 (초)
+          example: 1800
+        user:
+          $ref: '#/components/schemas/OAuthUserInfo'
+        is_new_user:
+          type: boolean
+          description: 신규 가입 여부
+          example: true
+
+    OAuthUserInfo:
+      type: object
+      required:
+        - id
+        - email
+        - provider
+      properties:
+        id:
+          type: string
+          format: uuid
+          description: 사용자 ID
+        email:
+          type: string
+          format: email
+          description: 이메일 주소
+        provider:
+          $ref: '#/components/schemas/OAuthProvider'
+        created_at:
+          type: string
+          format: date-time
+          description: 계정 생성 시각
+
+    ErrorResponse:
+      type: object
+      required:
+        - detail
+      properties:
+        detail:
+          type: string
+          description: 에러 메시지
+          example: "인증 요청이 만료되었습니다. 다시 시도해주세요"
+        error_code:
+          type: string
+          description: 에러 코드
+          example: "OAUTH_STATE_EXPIRED"

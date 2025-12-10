@@ -39,5 +39,23 @@ class Settings(BaseSettings):
     # CORS
     CORS_ORIGINS: list[str] = ["*"]
 
+    # OAuth - Kakao
+    KAKAO_CLIENT_ID: str = ""
+    KAKAO_CLIENT_SECRET: str = ""
+    KAKAO_REDIRECT_URI: str = "http://localhost:3000/auth/callback/kakao"
+
+    # OAuth - Google
+    GOOGLE_CLIENT_ID: str = ""
+    GOOGLE_CLIENT_SECRET: str = ""
+    GOOGLE_REDIRECT_URI: str = "http://localhost:3000/auth/callback/google"
+
+    # OAuth - Naver
+    NAVER_CLIENT_ID: str = ""
+    NAVER_CLIENT_SECRET: str = ""
+    NAVER_REDIRECT_URI: str = "http://localhost:3000/auth/callback/naver"
+
+    # OAuth State TTL (seconds)
+    OAUTH_STATE_EXPIRE_SECONDS: int = 600
+
 
 settings = Settings()
