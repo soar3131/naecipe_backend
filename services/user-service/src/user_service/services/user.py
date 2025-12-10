@@ -6,6 +6,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from user_service.core.exceptions import EmailExistsError
 from user_service.core.security import hash_password
 from user_service.models.user import User, UserStatus
+from user_service.models.user_profile import UserProfile
 from user_service.schemas.auth import RegisterRequest
 from user_service.schemas.user import RegisterResponse
 
@@ -48,6 +49,14 @@ class UserService:
         self.db.add(user)
         await self.db.flush()
         await self.db.refresh(user)
+
+        # 프로필 자동 생성 (SPEC-003)
+        profile = UserProfile(
+            user_id=user.id,
+            display_name="",
+        )
+        self.db.add(profile)
+        await self.db.flush()
 
         return RegisterResponse(
             id=user.id,

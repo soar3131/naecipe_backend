@@ -20,6 +20,7 @@ from user_service.core.security import create_access_token, create_refresh_token
 from user_service.db.redis import get_redis
 from user_service.models.oauth_account import OAuthAccount
 from user_service.models.user import User, UserStatus
+from user_service.models.user_profile import UserProfile
 from user_service.schemas.oauth import (
     OAuthAuthorizationResponse,
     OAuthLoginResponse,
@@ -358,6 +359,14 @@ class OAuthService:
             self.db.add(user)
             await self.db.flush()
             is_new_user = True
+
+            # 프로필 자동 생성 (SPEC-003)
+            profile = UserProfile(
+                user_id=str(user.id),
+                display_name="",
+            )
+            self.db.add(profile)
+            await self.db.flush()
 
         # Create OAuth account link
         oauth_account = OAuthAccount(
