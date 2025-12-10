@@ -19,6 +19,8 @@
 
 ## Spec-Kit 워크플로우 명령어
 
+> **⚠️ 중요**: 스펙 생성 전 **반드시** `SPECKIT_TODO.md`를 먼저 참조하세요. 이 문서에는 전체 스펙 목록(SPEC-000~021), 도메인 용어 정의, ERD, Kafka 이벤트, 캐시 전략, 보안 요구사항 등이 정의되어 있습니다.
+
 `.claude/commands/`에 정의된 슬래시 명령어들:
 
 | 명령어 | 용도 |
@@ -97,6 +99,7 @@ shared/
 
 ## 핵심 원칙 (Spec-Kit)
 
+- **SPECKIT_TODO.md 필수 참조**: 스펙 생성 전 `SPECKIT_TODO.md`를 읽어 해당 SPEC의 요구사항, 의존성, DB 테이블, API 명세를 확인
 - **구현 전 명세 작성**: 코드가 아닌 `/speckit.specify`로 시작
 - **유저 스토리는 독립적으로 테스트 가능**: 각 스토리는 MVP 증분으로 독립 구현, 테스트, 배포 가능
 - **태스크는 엄격한 형식 준수**: `- [ ] T### [P?] [US#?] 파일 경로와 함께 설명`
@@ -153,6 +156,8 @@ Co-Authored-By: Claude <noreply@anthropic.com>
 - Python 3.11+ + FastAPI 0.100+, SQLAlchemy, Pydantic, redis[hiredis] (003-recipe-basic-crud)
 - PostgreSQL 15+ (Recipe DB), Redis 7+ (캐시) (003-recipe-basic-crud)
 - PostgreSQL 15+ (User DB), Redis 7+ (세션 캐시) (003-user-profile-preferences)
+- Python 3.11+ + FastAPI 0.100+, SQLAlchemy 2.0+, Pydantic 2.0+, redis[hiredis] (004-recipe-basic-crud)
+- PostgreSQL 15+ (Recipe DB), Redis 7+ (캐싱) (004-recipe-basic-crud)
 
 ## Recent Changes
 - 001-project-setup: Added Python 3.11+ + FastAPI 0.100+, SQLAlchemy 2.0+, Pydantic 2.0+, Alembic
