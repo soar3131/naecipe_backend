@@ -160,6 +160,7 @@ Co-Authored-By: Claude <noreply@anthropic.com>
 ## Active Technologies
 - Python 3.11+ + FastAPI 0.100+, SQLAlchemy 2.0+, Pydantic 2.0+ (006-similar-recipe-recommendation)
 - PostgreSQL 15+ (단일 DB, 스키마 분리), Redis 7+ (단일 인스턴스) (006-similar-recipe-recommendation)
+- PostgreSQL 15+ (단일 DB, cookbooks 스키마) (007-cookbook-basic-crud)
 
 **Core Stack (모듈러 모놀리스)**:
 - Python 3.11+ + FastAPI 0.100+
