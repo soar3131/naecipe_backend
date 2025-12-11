@@ -13,6 +13,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.core.dependencies import DbSession
 from app.recipes.schemas import (
+    CategoryPopularListResponse,
     ChefDetail,
     ChefListItem,
     ChefListResponse,
@@ -20,8 +21,11 @@ from app.recipes.schemas import (
     RecipeDetail,
     RecipeListItem,
     RecipeListResponse,
+    RelatedByTagsListResponse,
+    SameChefRecipeListResponse,
     SearchQueryParams,
     SearchResult,
+    SimilarRecipeListResponse,
 )
 from app.recipes.services import (
     ChefService,
@@ -345,3 +349,136 @@ async def get_chef_recipes(
     recipe_service = RecipeService(db)
     pagination = PaginationParams(cursor=cursor, limit=limit)
     return await recipe_service.get_by_chef(chef_id, pagination)
+
+
+# =============================================================================
+# 유사 레시피 추천 엔드포인트
+# =============================================================================
+
+
+@router.get(
+    "/{recipe_id}/similar",
+    response_model=SimilarRecipeListResponse,
+    summary="유사 레시피 추천",
+    description="태그, 재료, 조리방식 기반으로 유사한 레시피를 추천합니다.",
+    tags=["similar-recipes"],
+    responses={
+        200: {"description": "유사 레시피 목록"},
+        404: {"description": "레시피를 찾을 수 없음"},
+    },
+)
+async def get_similar_recipes(
+    recipe_id: str,
+    db: DbSession,
+    cursor: Annotated[str | None, Query(description="페이지네이션 커서")] = None,
+    limit: Annotated[int, Query(ge=1, le=50, description="조회 개수")] = 10,
+) -> SimilarRecipeListResponse:
+    """
+    유사 레시피 추천
+
+    태그(40%), 재료(40%), 조리방식(20%) 기반 복합 유사도로 추천
+
+    - **recipe_id**: 기준 레시피 UUID
+    - **cursor**: 다음 페이지를 위한 커서
+    - **limit**: 조회할 레시피 수 (기본 10, 최대 50)
+    """
+    from app.recipes.services import SimilarRecipeService
+
+    service = SimilarRecipeService(db)
+    return await service.get_similar_recipes(recipe_id, cursor, limit)
+
+
+@router.get(
+    "/{recipe_id}/same-chef",
+    response_model=SameChefRecipeListResponse,
+    summary="같은 요리사 레시피",
+    description="동일 요리사의 다른 레시피를 조회수 순으로 조회합니다.",
+    tags=["similar-recipes"],
+    responses={
+        200: {"description": "같은 요리사 레시피 목록"},
+        404: {"description": "레시피를 찾을 수 없음"},
+    },
+)
+async def get_same_chef_recipes(
+    recipe_id: str,
+    db: DbSession,
+    cursor: Annotated[str | None, Query(description="페이지네이션 커서")] = None,
+    limit: Annotated[int, Query(ge=1, le=50, description="조회 개수")] = 10,
+) -> SameChefRecipeListResponse:
+    """
+    같은 요리사 레시피
+
+    동일 요리사의 다른 레시피를 조회수 내림차순으로 조회
+
+    - **recipe_id**: 기준 레시피 UUID
+    - **cursor**: 다음 페이지를 위한 커서
+    - **limit**: 조회할 레시피 수 (기본 10, 최대 50)
+    """
+    from app.recipes.services import SimilarRecipeService
+
+    service = SimilarRecipeService(db)
+    return await service.get_same_chef_recipes(recipe_id, cursor, limit)
+
+
+@router.get(
+    "/{recipe_id}/related-by-tags",
+    response_model=RelatedByTagsListResponse,
+    summary="관련 태그 레시피",
+    description="공유 태그 기반으로 관련 레시피를 추천합니다.",
+    tags=["similar-recipes"],
+    responses={
+        200: {"description": "관련 태그 레시피 목록"},
+        404: {"description": "레시피를 찾을 수 없음"},
+    },
+)
+async def get_related_by_tags(
+    recipe_id: str,
+    db: DbSession,
+    cursor: Annotated[str | None, Query(description="페이지네이션 커서")] = None,
+    limit: Annotated[int, Query(ge=1, le=50, description="조회 개수")] = 10,
+) -> RelatedByTagsListResponse:
+    """
+    관련 태그 레시피
+
+    공유 태그 개수가 많은 순으로 관련 레시피 추천
+
+    - **recipe_id**: 기준 레시피 UUID
+    - **cursor**: 다음 페이지를 위한 커서
+    - **limit**: 조회할 레시피 수 (기본 10, 최대 50)
+    """
+    from app.recipes.services import SimilarRecipeService
+
+    service = SimilarRecipeService(db)
+    return await service.get_related_by_tags(recipe_id, cursor, limit)
+
+
+@router.get(
+    "/{recipe_id}/category-popular",
+    response_model=CategoryPopularListResponse,
+    summary="카테고리 인기 레시피",
+    description="동일 카테고리(난이도+조리시간) 내 인기 레시피를 조회합니다.",
+    tags=["similar-recipes"],
+    responses={
+        200: {"description": "카테고리 인기 레시피 목록"},
+        404: {"description": "레시피를 찾을 수 없음"},
+    },
+)
+async def get_category_popular(
+    recipe_id: str,
+    db: DbSession,
+    cursor: Annotated[str | None, Query(description="페이지네이션 커서")] = None,
+    limit: Annotated[int, Query(ge=1, le=50, description="조회 개수")] = 10,
+) -> CategoryPopularListResponse:
+    """
+    카테고리 인기 레시피
+
+    기준 레시피와 동일 카테고리(난이도+조리시간 범위) 내 조회수 순 정렬
+
+    - **recipe_id**: 기준 레시피 UUID
+    - **cursor**: 다음 페이지를 위한 커서
+    - **limit**: 조회할 레시피 수 (기본 10, 최대 50)
+    """
+    from app.recipes.services import SimilarRecipeService
+
+    service = SimilarRecipeService(db)
+    return await service.get_category_popular(recipe_id, cursor, limit)

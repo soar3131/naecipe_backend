@@ -1,0 +1,470 @@
+openapi: 3.1.0
+info:
+  title: Similar Recipes API
+  description: |
+    유사 레시피 추천 API 명세.
+    콘텐츠 기반 유사도, 같은 요리사 레시피, 태그 기반 관련 레시피, 카테고리 인기 레시피를 제공합니다.
+  version: 1.0.0
+  contact:
+    name: Naecipe Backend Team
+
+servers:
+  - url: /api/v1
+    description: API v1
+
+tags:
+  - name: Similar Recipes
+    description: 유사 레시피 추천 엔드포인트
+
+paths:
+  /recipes/{recipe_id}/similar:
+    get:
+      summary: 유사 레시피 조회
+      description: |
+        주어진 레시피와 콘텐츠 기반으로 유사한 레시피 목록을 반환합니다.
+        유사도 = 태그 유사도(40%) + 재료 유사도(40%) + 조리법 유사도(20%)
+      operationId: getSimilarRecipes
+      tags:
+        - Similar Recipes
+      parameters:
+        - $ref: '#/components/parameters/RecipeIdPath'
+        - $ref: '#/components/parameters/LimitQuery'
+        - $ref: '#/components/parameters/CursorQuery'
+      responses:
+        '200':
+          description: 유사 레시피 목록
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/SimilarRecipeListResponse'
+              example:
+                items:
+                  - id: "550e8400-e29b-41d4-a716-446655440001"
+                    title: "돼지고기 김치찌개"
+                    thumbnail_url: "https://example.com/thumb1.jpg"
+                    difficulty: "medium"
+                    cook_time_minutes: 30
+                    chef:
+                      id: "660e8400-e29b-41d4-a716-446655440001"
+                      name: "백종원"
+                      profile_image_url: "https://example.com/chef1.jpg"
+                    similarity_score: 0.85
+                    tags:
+                      - name: "한식"
+                        slug: "korean"
+                      - name: "찌개"
+                        slug: "stew"
+                next_cursor: "eyJzaW0iOjAuODUsImV4cCI6MTAwLCJpZCI6IjU1MGU4NDAwLi4uIn0="
+                has_more: true
+        '404':
+          $ref: '#/components/responses/RecipeNotFound'
+
+  /recipes/{recipe_id}/same-chef:
+    get:
+      summary: 같은 요리사 레시피 조회
+      description: 동일한 요리사의 다른 레시피 목록을 반환합니다.
+      operationId: getSameChefRecipes
+      tags:
+        - Similar Recipes
+      parameters:
+        - $ref: '#/components/parameters/RecipeIdPath'
+        - $ref: '#/components/parameters/LimitQuery'
+        - $ref: '#/components/parameters/CursorQuery'
+      responses:
+        '200':
+          description: 같은 요리사 레시피 목록
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/SameChefRecipeListResponse'
+              example:
+                items:
+                  - id: "550e8400-e29b-41d4-a716-446655440002"
+                    title: "백종원 볶음밥"
+                    thumbnail_url: "https://example.com/thumb2.jpg"
+                    difficulty: "easy"
+                    cook_time_minutes: 15
+                    view_count: 50000
+                    tags:
+                      - name: "한식"
+                        slug: "korean"
+                next_cursor: null
+                has_more: false
+        '404':
+          $ref: '#/components/responses/RecipeNotFound'
+
+  /recipes/{recipe_id}/related-by-tags:
+    get:
+      summary: 태그 기반 관련 레시피 조회
+      description: 공유 태그 수가 많은 순서로 관련 레시피를 반환합니다.
+      operationId: getRelatedByTags
+      tags:
+        - Similar Recipes
+      parameters:
+        - $ref: '#/components/parameters/RecipeIdPath'
+        - $ref: '#/components/parameters/LimitQuery'
+        - $ref: '#/components/parameters/CursorQuery'
+      responses:
+        '200':
+          description: 태그 기반 관련 레시피 목록
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/RelatedByTagsListResponse'
+              example:
+                items:
+                  - id: "550e8400-e29b-41d4-a716-446655440003"
+                    title: "김치볶음밥"
+                    thumbnail_url: "https://example.com/thumb3.jpg"
+                    difficulty: "easy"
+                    cook_time_minutes: 20
+                    shared_tags_count: 3
+                    tags:
+                      - name: "한식"
+                        slug: "korean"
+                      - name: "볶음밥"
+                        slug: "fried-rice"
+                next_cursor: null
+                has_more: false
+        '404':
+          $ref: '#/components/responses/RecipeNotFound'
+
+  /recipes/{recipe_id}/category-popular:
+    get:
+      summary: 카테고리 인기 레시피 조회
+      description: 동일 카테고리 내에서 조회수가 높은 레시피를 반환합니다.
+      operationId: getCategoryPopular
+      tags:
+        - Similar Recipes
+      parameters:
+        - $ref: '#/components/parameters/RecipeIdPath'
+        - $ref: '#/components/parameters/LimitQuery'
+        - $ref: '#/components/parameters/CursorQuery'
+      responses:
+        '200':
+          description: 카테고리 인기 레시피 목록
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/CategoryPopularListResponse'
+              example:
+                items:
+                  - id: "550e8400-e29b-41d4-a716-446655440004"
+                    title: "된장찌개"
+                    thumbnail_url: "https://example.com/thumb4.jpg"
+                    difficulty: "easy"
+                    cook_time_minutes: 25
+                    view_count: 100000
+                    category: "korean"
+                    tags:
+                      - name: "한식"
+                        slug: "korean"
+                next_cursor: null
+                has_more: false
+        '404':
+          $ref: '#/components/responses/RecipeNotFound'
+
+components:
+  parameters:
+    RecipeIdPath:
+      name: recipe_id
+      in: path
+      required: true
+      description: 기준 레시피 ID (UUID)
+      schema:
+        type: string
+        format: uuid
+      example: "550e8400-e29b-41d4-a716-446655440000"
+
+    LimitQuery:
+      name: limit
+      in: query
+      required: false
+      description: 반환할 레시피 수 (기본값 10, 최대 50)
+      schema:
+        type: integer
+        minimum: 1
+        maximum: 50
+        default: 10
+      example: 10
+
+    CursorQuery:
+      name: cursor
+      in: query
+      required: false
+      description: 페이지네이션 커서 (Base64 인코딩)
+      schema:
+        type: string
+      example: "eyJzaW0iOjAuODUsImV4cCI6MTAwLCJpZCI6IjU1MGU4NDAwLi4uIn0="
+
+  schemas:
+    # 기본 응답 스키마
+    ChefSummary:
+      type: object
+      description: 요리사 요약 정보
+      properties:
+        id:
+          type: string
+          format: uuid
+        name:
+          type: string
+        profile_image_url:
+          type: string
+          format: uri
+          nullable: true
+      required:
+        - id
+        - name
+
+    TagSummary:
+      type: object
+      description: 태그 요약 정보
+      properties:
+        name:
+          type: string
+        slug:
+          type: string
+      required:
+        - name
+        - slug
+
+    # 유사 레시피 응답
+    SimilarRecipeItem:
+      type: object
+      description: 유사 레시피 항목
+      properties:
+        id:
+          type: string
+          format: uuid
+        title:
+          type: string
+        thumbnail_url:
+          type: string
+          format: uri
+          nullable: true
+        difficulty:
+          type: string
+          enum: [easy, medium, hard]
+        cook_time_minutes:
+          type: integer
+          nullable: true
+        chef:
+          $ref: '#/components/schemas/ChefSummary'
+          nullable: true
+        similarity_score:
+          type: number
+          format: float
+          minimum: 0
+          maximum: 1
+          description: 유사도 점수 (0~1)
+        tags:
+          type: array
+          items:
+            $ref: '#/components/schemas/TagSummary'
+      required:
+        - id
+        - title
+        - difficulty
+        - similarity_score
+        - tags
+
+    SimilarRecipeListResponse:
+      type: object
+      description: 유사 레시피 목록 응답
+      properties:
+        items:
+          type: array
+          items:
+            $ref: '#/components/schemas/SimilarRecipeItem'
+        next_cursor:
+          type: string
+          nullable: true
+          description: 다음 페이지 커서 (없으면 null)
+        has_more:
+          type: boolean
+          description: 다음 페이지 존재 여부
+      required:
+        - items
+        - next_cursor
+        - has_more
+
+    # 같은 요리사 레시피 응답
+    SameChefRecipeItem:
+      type: object
+      description: 같은 요리사 레시피 항목
+      properties:
+        id:
+          type: string
+          format: uuid
+        title:
+          type: string
+        thumbnail_url:
+          type: string
+          format: uri
+          nullable: true
+        difficulty:
+          type: string
+          enum: [easy, medium, hard]
+        cook_time_minutes:
+          type: integer
+          nullable: true
+        view_count:
+          type: integer
+        tags:
+          type: array
+          items:
+            $ref: '#/components/schemas/TagSummary'
+      required:
+        - id
+        - title
+        - difficulty
+        - view_count
+        - tags
+
+    SameChefRecipeListResponse:
+      type: object
+      description: 같은 요리사 레시피 목록 응답
+      properties:
+        items:
+          type: array
+          items:
+            $ref: '#/components/schemas/SameChefRecipeItem'
+        next_cursor:
+          type: string
+          nullable: true
+        has_more:
+          type: boolean
+      required:
+        - items
+        - next_cursor
+        - has_more
+
+    # 태그 기반 관련 레시피 응답
+    RelatedByTagsItem:
+      type: object
+      description: 태그 기반 관련 레시피 항목
+      properties:
+        id:
+          type: string
+          format: uuid
+        title:
+          type: string
+        thumbnail_url:
+          type: string
+          format: uri
+          nullable: true
+        difficulty:
+          type: string
+          enum: [easy, medium, hard]
+        cook_time_minutes:
+          type: integer
+          nullable: true
+        shared_tags_count:
+          type: integer
+          description: 공유 태그 수
+        tags:
+          type: array
+          items:
+            $ref: '#/components/schemas/TagSummary'
+      required:
+        - id
+        - title
+        - difficulty
+        - shared_tags_count
+        - tags
+
+    RelatedByTagsListResponse:
+      type: object
+      description: 태그 기반 관련 레시피 목록 응답
+      properties:
+        items:
+          type: array
+          items:
+            $ref: '#/components/schemas/RelatedByTagsItem'
+        next_cursor:
+          type: string
+          nullable: true
+        has_more:
+          type: boolean
+      required:
+        - items
+        - next_cursor
+        - has_more
+
+    # 카테고리 인기 레시피 응답
+    CategoryPopularItem:
+      type: object
+      description: 카테고리 인기 레시피 항목
+      properties:
+        id:
+          type: string
+          format: uuid
+        title:
+          type: string
+        thumbnail_url:
+          type: string
+          format: uri
+          nullable: true
+        difficulty:
+          type: string
+          enum: [easy, medium, hard]
+        cook_time_minutes:
+          type: integer
+          nullable: true
+        view_count:
+          type: integer
+        category:
+          type: string
+        tags:
+          type: array
+          items:
+            $ref: '#/components/schemas/TagSummary'
+      required:
+        - id
+        - title
+        - difficulty
+        - view_count
+        - category
+        - tags
+
+    CategoryPopularListResponse:
+      type: object
+      description: 카테고리 인기 레시피 목록 응답
+      properties:
+        items:
+          type: array
+          items:
+            $ref: '#/components/schemas/CategoryPopularItem'
+        next_cursor:
+          type: string
+          nullable: true
+        has_more:
+          type: boolean
+      required:
+        - items
+        - next_cursor
+        - has_more
+
+    # 에러 응답
+    ErrorResponse:
+      type: object
+      properties:
+        detail:
+          type: string
+          description: 에러 상세 메시지
+        code:
+          type: string
+          description: 에러 코드
+      required:
+        - detail
+
+  responses:
+    RecipeNotFound:
+      description: 레시피를 찾을 수 없음
+      content:
+        application/json:
+          schema:
+            $ref: '#/components/schemas/ErrorResponse'
+          example:
+            detail: "Recipe not found"
+            code: "RECIPE_NOT_FOUND"
