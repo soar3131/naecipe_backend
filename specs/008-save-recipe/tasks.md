@@ -4,6 +4,7 @@
 **Prerequisites**: plan.md ✅, spec.md ✅, research.md ✅, data-model.md ✅, contracts/openapi.yaml ✅
 
 **Tests**: TDD 방식 - 각 User Story의 테스트를 먼저 작성하고 구현
+**Total Tasks**: 49개 (T001 ~ T049)
 
 **Organization**: Tasks are grouped by user story to enable independent implementation and testing
 
@@ -167,6 +168,7 @@
 - [ ] T046 [P] OpenAPI 문서 주석 보강 (`app/cookbooks/router.py`)
 - [ ] T047 전체 테스트 실행 및 커버리지 검증 (`pytest tests/cookbooks/test_saved_recipe*.py --cov`)
 - [ ] T048 quickstart.md 시나리오 검증 (수동 또는 자동 테스트)
+- [ ] T049 [P] 성능 벤치마크 테스트 - SC-001 저장 <500ms, SC-002 목록 <200ms 검증
 
 ---
 

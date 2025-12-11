@@ -41,7 +41,7 @@
 |--------|------|----------|---------|-------------|
 | `id` | UUID | NO | uuid4() | Primary Key |
 | `cookbook_id` | UUID | NO | - | FK → cookbooks.id (CASCADE) |
-| `original_recipe_id` | UUID | NO | - | FK → recipes.id (SET NULL) |
+| `original_recipe_id` | UUID | YES | - | FK → recipes.id (SET NULL) |
 | `active_version_id` | UUID | YES | NULL | FK → recipe_variations.id (SPEC-009) |
 | `memo` | TEXT | YES | NULL | 개인 메모 (max 1000자) |
 | `cook_count` | INTEGER | NO | 0 | 조리 횟수 |
@@ -119,10 +119,10 @@ class SavedRecipe(Base, TimestampMixin):
         nullable=False,
         comment="소속 레시피북 ID",
     )
-    original_recipe_id: Mapped[str] = mapped_column(
+    original_recipe_id: Mapped[str | None] = mapped_column(
         UUID(as_uuid=False),
         ForeignKey("recipes.id", ondelete="SET NULL"),
-        nullable=False,  # 초기에는 NOT NULL, SET NULL 시 nullable로 변경
+        nullable=True,  # 원본 레시피 삭제 시 SET NULL 허용
         comment="원본 레시피 ID",
     )
     active_version_id: Mapped[str | None] = mapped_column(
@@ -197,7 +197,7 @@ def upgrade() -> None:
                   nullable=False),
         sa.Column('original_recipe_id', UUID(as_uuid=False),
                   sa.ForeignKey('recipes.id', ondelete='SET NULL'),
-                  nullable=False),
+                  nullable=True),  # 원본 레시피 삭제 시 SET NULL 허용
         sa.Column('active_version_id', UUID(as_uuid=False), nullable=True),
         sa.Column('memo', sa.Text, nullable=True),
         sa.Column('cook_count', sa.Integer, nullable=False, default=0),
