@@ -96,6 +96,29 @@
 
 ---
 
+## 현재 구현 상태 (2025.12.11 기준)
+
+> **✅ 완료된 SPEC**
+
+| SPEC | 이름 | 모듈 | 상태 |
+|------|------|------|------|
+| SPEC-000 | 프로젝트 기반 설정 | core, infra | ✅ 완료 |
+| SPEC-001 | 사용자 인증 기본 | users | ✅ 완료 |
+| SPEC-002 | OAuth 소셜 로그인 | users | ✅ 완료 |
+| SPEC-003 | 사용자 프로필/취향 | users | ✅ 완료 |
+| SPEC-004 | 원본 레시피 기본 CRUD | recipes | ✅ 완료 |
+| SPEC-005 | 원본 레시피 검색 | recipes | ✅ 완료 |
+
+> **⏳ 다음 구현 대상**: SPEC-006 (유사 레시피 추천), SPEC-007 (레시피북 기본 CRUD)
+
+> **⚠️ 현재 구현과 SPECKIT 차이점**
+> - `recipe_sources` 테이블: 미구현 → `recipes.source_url`, `recipes.source_platform` 필드 사용
+> - `recipe_score_history` 테이블: 미구현 → Phase 3 예정
+> - `sessions` 테이블: 미구현 → Redis 기반 세션 관리
+> - `taste_preferences.umami`: 미구현 → sweetness/saltiness/spiciness/sourness만 존재
+
+---
+
 ## 스펙 구현 순서 (의존성 기반)
 
 ### Phase 0: 프로젝트 기반 설정
@@ -120,23 +143,24 @@
   - 이메일 회원가입 / 로그인
   - JWT 토큰 발급 (Access + Refresh)
   - 비밀번호 해싱 (bcrypt)
-  - 세션 관리 (Redis)
-  - **관련 API**: `POST /auth/register`, `POST /auth/login`, `POST /auth/logout`, `POST /auth/refresh`
-  - **DB 테이블**: `users`, `sessions`
+  - 세션 관리 (Redis - `session:{sessionId}`, TTL 24h)
+  - **관련 API**: `POST /api/v1/auth/register`, `POST /api/v1/auth/login`, `POST /api/v1/auth/logout`, `POST /api/v1/auth/refresh`
+  - **DB 테이블**: `users` (status Enum: ACTIVE/INACTIVE/LOCKED)
+  - **Redis 키**: `session:{sessionId}` (세션), `refresh:{jti}` (리프레시 토큰)
 
 - [x] **SPEC-002**: OAuth 소셜 로그인
-  - Google OAuth
   - Kakao OAuth
+  - Google OAuth
   - Naver OAuth
-  - **관련 API**: `POST /auth/oauth/:provider`
-  - **DB 테이블**: `oauth_accounts`
+  - **관련 API**: `GET /api/v1/auth/oauth/:provider` (인증 URL), `GET /api/v1/auth/oauth/:provider/callback` (콜백)
+  - **DB 테이블**: `oauth_accounts` (provider Enum: kakao/google/naver)
 
 - [x] **SPEC-003**: 사용자 프로필 및 취향 설정
-  - 프로필 조회/수정
-  - 식이 제한, 알레르기 설정
-  - 맛 취향 프로파일 (단맛, 짠맛, 매운맛, 신맛)
-  - **관련 API**: `GET /users/me`, `PUT /users/me`, `PUT /users/me/preferences`
-  - **DB 테이블**: `user_profiles`, `taste_preferences`
+  - 프로필 조회/수정 (display_name, profile_image_url)
+  - 식이 제한, 알레르기 설정 (JSONB)
+  - 맛 취향 프로파일 (단맛, 짠맛, 매운맛, 신맛 - 1~5점)
+  - **관련 API**: `GET /api/v1/users/me`, `PUT /api/v1/users/me/profile`, `PUT /api/v1/users/me/preferences`
+  - **DB 테이블**: `user_profiles`, `taste_preferences` (category별 UK)
 
 ---
 
@@ -146,39 +170,38 @@
 - [x] **SPEC-004**: 원본 레시피 기본 CRUD
   - **대상**: 크롤링/수집된 원본 레시피 (사용자 수정 불가)
   - 레시피 상세 조회 (재료, 조리 단계, 영양 정보, 태그, **요리사 정보**)
-  - 레시피 목록 조회 (페이지네이션)
-  - 인기 레시피 조회 (조회수, 저장수, 조리 완료수 기반)
+  - 레시피 목록 조회 (커서 기반 페이지네이션)
+  - 인기 레시피 조회 (exposure_score, view_count 기반)
   - **요리사별 레시피 조회** (특정 셰프/인플루언서의 레시피 전체)
   - **관련 API**:
-    - `GET /recipes/:id` - 원본 레시피 상세 (요리사 정보 포함)
-    - `GET /recipes` - 원본 레시피 목록
-    - `GET /recipes/popular` - 인기 원본 레시피
-    - `GET /chefs` - 요리사 목록 (인기순, 레시피 수순)
-    - `GET /chefs/:id` - 요리사 상세 (프로필, 플랫폼 정보)
-    - `GET /chefs/:id/recipes` - 요리사별 레시피 목록
-    - `GET /chefs/popular` - 인기 요리사 (레시피 수, 조회수, 평점 기반)
+    - `GET /api/v1/recipes/:id` - 원본 레시피 상세 (요리사 정보 포함)
+    - `GET /api/v1/recipes` - 원본 레시피 목록 (커서 기반)
+    - `GET /api/v1/recipes/popular` - 인기 원본 레시피
+    - `GET /api/v1/chefs` - 요리사 목록 (인기순, 레시피 수순)
+    - `GET /api/v1/chefs/:id` - 요리사 상세 (프로필, 플랫폼 정보)
+    - `GET /api/v1/chefs/:id/recipes` - 요리사별 레시피 목록
+    - `GET /api/v1/chefs/popular` - 인기 요리사 (레시피 수, 조회수, 평점 기반)
   - **DB 테이블**:
-    - `chefs` - 요리사/셰프/인플루언서 마스터 테이블
-    - `chef_platforms` - 요리사 플랫폼 정보 (유튜브, 인스타, 블로그)
-    - `recipes` - 원본 레시피 메인 테이블 (chef_id FK 포함)
-    - `recipe_ingredients` - 재료 (양, 단위 포함)
-    - `cooking_steps` - 조리 단계 (순서, 설명, 팁)
-    - `tags` - 태그 마스터
-    - `recipe_tags` - 레시피-태그 연결
-    - `recipe_sources` - 출처 정보 (URL, 플랫폼)
+    - `chefs` - 요리사/셰프/인플루언서 마스터 테이블 ✅
+    - `chef_platforms` - 요리사 플랫폼 정보 (유튜브, 인스타, 블로그) ✅
+    - `recipes` - 원본 레시피 메인 테이블 (chef_id FK, source_url 포함) ✅
+    - `recipe_ingredients` - 재료 (양, 단위 포함) ✅
+    - `cooking_steps` - 조리 단계 (순서, 설명, 팁) ✅
+    - `tags` - 태그 마스터 ✅
+    - `recipe_tags` - 레시피-태그 연결 ✅
+    - ~~`recipe_sources`~~ - 출처 정보 ⏳ 미구현 (recipes.source_url 사용)
   - **캐시**: Redis (`recipe:{id}`, `chef:{id}`, TTL 1시간)
 
-- [ ] **SPEC-005**: 원본 레시피 검색
+- [x] **SPEC-005**: 원본 레시피 검색
   - 키워드 검색 (제목, 설명, 재료명, **요리사명**)
-  - 필터링 (난이도, 조리시간, 태그, 칼로리 범위, **요리사**)
-  - **요리사 필터**: `chef_id` 또는 `chef_name`으로 필터링
-  - 정렬 (종합 스코어, 최신순, 조리시간순, 인기순)
+  - 필터링 (난이도, 조리시간, 태그, **요리사**)
+  - **요리사 필터**: `chef_id`로 필터링
+  - 정렬 (관련도순, 최신순, 조리시간순, 인기순)
   - Cursor 기반 페이지네이션 (무한 스크롤 지원)
   - **검색 결과**: 레시피 목록에 `chef` 정보 포함 (id, name, profile_image_url)
-  - **관련 API**: `GET /recipes/search`
-  - **연동**: Knowledge 모듈 (Elasticsearch - chef_name 인덱싱)
+  - **관련 API**: `GET /api/v1/recipes/search`
   - **캐시**: 검색 결과 캐싱 (Redis, TTL 5분)
-  - **⚠️ chefs 테이블 의존**: SPEC-004 완료 필요
+  - **⚠️ Elasticsearch 연동**: 현재 PostgreSQL LIKE 기반 (추후 ES 연동 가능)
 
 - [ ] **SPEC-006**: 유사 레시피 추천
   - 콘텐츠 기반 유사 레시피 (재료, 조리법 유사도)
@@ -392,31 +415,33 @@
 
 ---
 
-### Phase 4: Infrastructure (인프라)
+### Phase 4: Infrastructure (인프라) - 모듈러 모놀리스 v2.0 간소화
 
-- [ ] **SPEC-018**: API Gateway (Kong)
-  - 라우팅 설정 (서비스별)
-  - Rate Limiting (사용자별, IP별)
-  - JWT 검증 플러그인
-  - CORS 설정
-  - 요청/응답 로깅
+> **⚠️ v2.0 변경**: 마이크로서비스 → 모듈러 모놀리스로 전환됨에 따라 Kong, Kafka, gRPC는 더 이상 필요 없음
 
-- [ ] **SPEC-019**: 메시지 큐 (Kafka)
-  - 토픽 설정:
-    - `recipe.events` - 레시피 생성/수정/삭제
-    - `user.events` - 사용자 관련 이벤트
-    - `cookbook.events` - 레시피북/저장 이벤트
-    - `feedback.events` - 피드백 제출 이벤트
-    - `ai.events` - AI 처리 완료 이벤트
-  - Consumer Group 설정
-  - 이벤트 스키마 정의 (Avro/JSON Schema)
-  - Dead Letter Queue
+- [ ] **SPEC-018**: API 미들웨어 및 보안 ~~(구 API Gateway)~~
+  - ~~Kong API Gateway~~ → FastAPI 미들웨어로 대체
+  - Rate Limiting (SlowAPI 또는 커스텀 미들웨어)
+  - JWT 검증 (app/core/security.py에서 처리)
+  - CORS 설정 (FastAPI CORSMiddleware)
+  - 요청/응답 로깅 (CloudWatch 연동)
+  - 요청 ID 추적 (X-Request-ID)
 
-- [ ] **SPEC-020**: 서비스 간 통신 (gRPC)
-  - Proto 파일 정의
-  - Recipe Service gRPC (레시피 조회)
-  - User Service gRPC (사용자 정보, 취향 조회)
-  - Cookbook Service gRPC (저장된 레시피 조회)
+- [x] **SPEC-019**: 비동기 작업 처리 ~~(구 Kafka)~~
+  - ~~Kafka~~ → FastAPI BackgroundTasks로 대체 ✅
+  - 비동기 작업 패턴:
+    - AI 보정 요청 → BackgroundTasks
+    - 이메일/푸시 발송 → BackgroundTasks
+    - 통계 집계 → BackgroundTasks
+  - 대규모 확장 필요 시 → AWS SQS 도입 예정
+  - ~~Dead Letter Queue~~ → 실패 시 DB 로깅으로 대체
+
+- [x] **SPEC-020**: 모듈 간 통신 ~~(구 gRPC)~~
+  - ~~gRPC~~ → Python 함수 호출로 대체 ✅
+  - 모듈 간 통신 패턴:
+    - `app/recipes/services.py` ← `app/cookbooks/services.py` 직접 import
+    - `app/users/services.py` ← 타 모듈에서 직접 import
+  - 장점: 단순성, 트랜잭션 일관성, 디버깅 용이
 
 ---
 
@@ -427,14 +452,15 @@
   - YouTube 크롤러 (영상 → 레시피 추출)
   - Instagram 크롤러 (피드/릴스 → 레시피 추출)
   - 블로그 크롤러 (네이버, 티스토리)
-  - **요리사 정보 추출**:
-    - 채널명/계정명 → `author_name`
-    - 플랫폼 (youtube/instagram/blog) → `platform`
-    - 채널 URL → `platform_url`
-    - 구독자 수 (가능 시) → `subscriber_count`
+  - **요리사 정보 추출** (chefs 테이블 매핑):
+    - 채널명/계정명 → `chefs.name`
+    - 플랫폼 (youtube/instagram/blog) → `chef_platforms.platform`
+    - 채널 URL → `chef_platforms.platform_url`
+    - 채널 ID → `chef_platforms.platform_id`
+    - 구독자 수 (가능 시) → `chef_platforms.subscriber_count`
   - 스케줄러 (APScheduler)
-  - **연동**: Ingestion Service API (`POST /ingestion/recipes` - chef 정보 포함)
-  - **⚠️ SPEC-015 의존**: Ingestion Service의 chef 매칭 로직 사용
+  - **연동**: Ingestion 모듈 API (`POST /api/v1/ingestion/recipes` - chef 정보 포함)
+  - **⚠️ SPEC-015 의존**: Ingestion 모듈의 chef 매칭 로직 사용
 
 ---
 
@@ -467,12 +493,14 @@ SPEC-006 (같은 요리사 추천)
 SPEC-021 (크롤러에서 chef 추출)
 ```
 
-### 신규 Kafka 이벤트
+### ~~신규 Kafka 이벤트~~ → BackgroundTasks 패턴 (v2.0)
 
-| 이벤트 | 발행자 | 소비자 | 용도 |
-|--------|--------|--------|------|
-| `ChefCreated` | Ingestion Service | Search Service | 요리사 신규 등록 → ES 인덱스 |
-| `ChefUpdated` | Recipe Service | Search Service | 요리사 정보 수정 → ES 업데이트 |
+> **⚠️ v2.0 변경**: Kafka 제거, BackgroundTasks로 대체
+
+| 작업 | 트리거 | 처리 | 용도 |
+|------|--------|------|------|
+| `sync_chef_to_search` | ingestion 모듈 | knowledge 모듈 | 요리사 신규 등록 → ES 인덱스 |
+| `update_chef_in_search` | recipes 모듈 | knowledge 모듈 | 요리사 정보 수정 → ES 업데이트 |
 
 ---
 
@@ -547,18 +575,18 @@ Phase 5: SPEC-021 (Crawler Bot - 별도)
 
 ## 서비스별 DB 테이블 요약
 
-### Recipe Service (원본 레시피)
-| 테이블 | 설명 |
-|--------|------|
-| `chefs` | 요리사/셰프/인플루언서 마스터 |
-| `chef_platforms` | 요리사 플랫폼 정보 (유튜브, 인스타, 블로그) |
-| `recipes` | 원본 레시피 메인 (chef_id FK) |
-| `recipe_ingredients` | 재료 (양, 단위) |
-| `cooking_steps` | 조리 단계 |
-| `tags` | 태그 마스터 |
-| `recipe_tags` | 레시피-태그 연결 |
-| `recipe_sources` | 출처 정보 |
-| `recipe_score_history` | 레시피 스코어 변경 이력 |
+### Recipe Service (원본 레시피) - app/recipes/ 모듈
+| 테이블 | 설명 | 구현 상태 |
+|--------|------|----------|
+| `chefs` | 요리사/셰프/인플루언서 마스터 | ✅ 구현됨 |
+| `chef_platforms` | 요리사 플랫폼 정보 (유튜브, 인스타, 블로그) | ✅ 구현됨 |
+| `recipes` | 원본 레시피 메인 (chef_id FK) | ✅ 구현됨 |
+| `recipe_ingredients` | 재료 (양, 단위) | ✅ 구현됨 |
+| `cooking_steps` | 조리 단계 | ✅ 구현됨 |
+| `tags` | 태그 마스터 | ✅ 구현됨 |
+| `recipe_tags` | 레시피-태그 연결 | ✅ 구현됨 |
+| ~~`recipe_sources`~~ | 출처 정보 | ⏳ 미구현 (recipes 테이블에 source_url 포함) |
+| ~~`recipe_score_history`~~ | 레시피 스코어 변경 이력 | ⏳ 미구현 (Phase 3 예정) |
 
 ### Cookbook Service (레시피북/보정 레시피)
 | 테이블 | 설명 |
@@ -570,20 +598,22 @@ Phase 5: SPEC-021 (Crawler Bot - 별도)
 | `adjusted_recipes` | 보정 레시피 (버전별) |
 | `adjustment_history` | 보정 히스토리 |
 
-### User Service
-| 테이블 | 설명 |
-|--------|------|
-| `users` | 사용자 기본 정보 |
-| `sessions` | 세션 |
-| `oauth_accounts` | OAuth 연결 |
-| `user_profiles` | 프로필 |
-| `taste_preferences` | 맛 취향 |
+### User Service (app/users/ 모듈)
+| 테이블 | 설명 | 비고 |
+|--------|------|------|
+| `users` | 사용자 기본 정보 | status Enum (ACTIVE/INACTIVE/LOCKED) |
+| `oauth_accounts` | OAuth 연결 | kakao/google/naver |
+| `user_profiles` | 프로필 | display_name, 식이제한, 알레르기 |
+| `taste_preferences` | 맛 취향 | category별로 sweetness/saltiness/spiciness/sourness |
+| ~~`sessions`~~ | ~~세션~~ | **Redis로 대체됨** (TTL 24h) |
 
 ---
 
 ## ERD (Entity Relationship Diagram)
 
 ### Recipe DB
+
+> **⚠️ 현재 구현 기준 (2025.12.11)**: `recipe_sources`, `recipe_score_history` 테이블은 미구현 (Phase 3 예정)
 
 ```mermaid
 erDiagram
@@ -592,8 +622,6 @@ erDiagram
     recipes ||--o{ recipe_ingredients : has
     recipes ||--o{ cooking_steps : has
     recipes ||--o{ recipe_tags : has
-    recipes ||--o{ recipe_sources : has
-    recipes ||--o{ recipe_score_history : has
     tags ||--o{ recipe_tags : has
 
     chefs {
@@ -682,100 +710,82 @@ erDiagram
         uuid tag_id PK_FK
     }
 
-    recipe_sources {
-        uuid id PK
-        uuid recipe_id FK
-        varchar platform
-        text source_url UK
-        varchar original_title
-        varchar original_author
-        bigint platform_view_count
-        int platform_like_count
-        int platform_comment_count
-        timestamptz first_discovered_at
-        timestamptz last_updated_at
-        jsonb raw_data
-    }
+    %% 미구현: recipe_sources (Phase 3 예정)
+    %% 현재는 recipes.source_url, recipes.source_platform 필드 사용
+    %% recipe_sources {
+    %%     uuid id PK
+    %%     uuid recipe_id FK
+    %%     varchar platform
+    %%     text source_url UK
+    %% }
 
-    recipe_score_history {
-        uuid id PK
-        uuid recipe_id FK
-        decimal quality_score
-        decimal popularity_score
-        decimal exposure_score
-        text score_reason
-        timestamptz recorded_at
-    }
+    %% 미구현: recipe_score_history (Phase 3 예정)
+    %% recipe_score_history {
+    %%     uuid id PK
+    %%     uuid recipe_id FK
+    %%     decimal quality_score
+    %%     timestamptz recorded_at
+    %% }
 ```
 
 ### User DB
+
+> **⚠️ 현재 구현 기준 (2025.12.11)**: sessions 테이블은 Redis로 대체됨
 
 ```mermaid
 erDiagram
     users ||--o| user_profiles : has
     users ||--o{ oauth_accounts : has
     users ||--o{ taste_preferences : has
-    users ||--o{ sessions : has
 
     users {
         uuid id PK
         varchar email UK
-        varchar password_hash
-        varchar name
-        text profile_image_url
-        varchar role
-        boolean is_active
-        boolean email_verified
+        varchar password_hash "nullable (OAuth only user)"
+        enum status "ACTIVE, INACTIVE, LOCKED"
+        timestamptz locked_until "nullable"
         timestamptz created_at
-        timestamptz last_login_at
         timestamptz updated_at
     }
 
     oauth_accounts {
         uuid id PK
         uuid user_id FK
-        varchar provider
-        varchar provider_account_id
-        text access_token
-        text refresh_token
-        timestamptz expires_at
+        enum provider "kakao, google, naver"
+        varchar provider_user_id
+        varchar provider_email "nullable"
         timestamptz created_at
+        timestamptz updated_at
     }
 
     user_profiles {
         uuid id PK
         uuid user_id FK_UK
+        varchar display_name
+        text profile_image_url "nullable"
         jsonb dietary_restrictions
         jsonb allergies
         jsonb cuisine_preferences
-        int skill_level
-        int household_size
-        varchar cooking_frequency
+        int skill_level "nullable"
+        int household_size "nullable"
+        timestamptz created_at
         timestamptz updated_at
     }
 
     taste_preferences {
         uuid id PK
         uuid user_id FK
-        varchar category
-        int sweetness
-        int saltiness
-        int spiciness
-        int sourness
-        int umami
+        varchar category "UK with user_id"
+        int sweetness "1-5, default 3"
+        int saltiness "1-5, default 3"
+        int spiciness "1-5, default 3"
+        int sourness "1-5, default 3"
+        timestamptz created_at
         timestamptz updated_at
     }
-
-    sessions {
-        uuid id PK
-        uuid user_id FK
-        varchar token_hash
-        text user_agent
-        varchar ip_address
-        timestamptz expires_at
-        timestamptz created_at
-    }
 ```
+
+**세션 관리**: Redis 기반 (`session:{sessionId}`, TTL 24h)
 
 ### Cookbook DB
 
