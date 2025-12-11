@@ -348,3 +348,121 @@ class PaginationParams(BaseModel):
 
     cursor: str | None = Field(None, description="페이지네이션 커서")
     limit: int = Field(20, ge=1, le=100, description="페이지당 항목 수")
+
+
+# ==========================================================================
+# 유사 레시피 스키마
+# ==========================================================================
+
+
+class TagSummarySchema(BaseModel):
+    """태그 요약 스키마 (유사 레시피용)"""
+
+    model_config = ConfigDict(from_attributes=True)
+
+    name: str = Field(description="태그명")
+    slug: str = Field(description="태그 슬러그")
+
+
+class SimilarRecipeItem(BaseModel):
+    """유사 레시피 항목 스키마"""
+
+    model_config = ConfigDict(from_attributes=True)
+
+    id: str = Field(description="레시피 ID")
+    title: str = Field(description="레시피 제목")
+    thumbnail_url: str | None = Field(None, description="썸네일 URL")
+    difficulty: str | None = Field(None, description="난이도")
+    cook_time_minutes: int | None = Field(None, description="조리 시간 (분)")
+    chef: ChefSummary | None = Field(None, description="요리사 정보")
+    similarity_score: float = Field(
+        description="유사도 점수 (0~1)", ge=0.0, le=1.0
+    )
+    tags: list[TagSummarySchema] = Field(
+        default_factory=list, description="태그 목록"
+    )
+
+
+class SimilarRecipeListResponse(BaseModel):
+    """유사 레시피 목록 응답 스키마"""
+
+    items: list[SimilarRecipeItem] = Field(description="유사 레시피 목록")
+    next_cursor: str | None = Field(None, description="다음 페이지 커서")
+    has_more: bool = Field(description="다음 페이지 존재 여부")
+
+
+class SameChefRecipeItem(BaseModel):
+    """같은 요리사 레시피 항목 스키마"""
+
+    model_config = ConfigDict(from_attributes=True)
+
+    id: str = Field(description="레시피 ID")
+    title: str = Field(description="레시피 제목")
+    thumbnail_url: str | None = Field(None, description="썸네일 URL")
+    difficulty: str | None = Field(None, description="난이도")
+    cook_time_minutes: int | None = Field(None, description="조리 시간 (분)")
+    view_count: int = Field(description="조회수")
+    tags: list[TagSummarySchema] = Field(
+        default_factory=list, description="태그 목록"
+    )
+
+
+class SameChefRecipeListResponse(BaseModel):
+    """같은 요리사 레시피 목록 응답 스키마"""
+
+    items: list[SameChefRecipeItem] = Field(description="같은 요리사 레시피 목록")
+    next_cursor: str | None = Field(None, description="다음 페이지 커서")
+    has_more: bool = Field(description="다음 페이지 존재 여부")
+
+
+class RelatedByTagsItem(BaseModel):
+    """태그 기반 관련 레시피 항목 스키마"""
+
+    model_config = ConfigDict(from_attributes=True)
+
+    id: str = Field(description="레시피 ID")
+    title: str = Field(description="레시피 제목")
+    thumbnail_url: str | None = Field(None, description="썸네일 URL")
+    difficulty: str | None = Field(None, description="난이도")
+    cook_time_minutes: int | None = Field(None, description="조리 시간 (분)")
+    chef: ChefSummary | None = Field(None, description="요리사 정보")
+    shared_tags_count: int = Field(description="공유 태그 수")
+    shared_tags: list[TagSummarySchema] = Field(
+        default_factory=list, description="공유 태그 목록"
+    )
+    tags: list[TagSummarySchema] = Field(
+        default_factory=list, description="전체 태그 목록"
+    )
+
+
+class RelatedByTagsListResponse(BaseModel):
+    """태그 기반 관련 레시피 목록 응답 스키마"""
+
+    items: list[RelatedByTagsItem] = Field(description="태그 기반 관련 레시피 목록")
+    next_cursor: str | None = Field(None, description="다음 페이지 커서")
+    has_more: bool = Field(description="다음 페이지 존재 여부")
+
+
+class CategoryPopularItem(BaseModel):
+    """카테고리 인기 레시피 항목 스키마"""
+
+    model_config = ConfigDict(from_attributes=True)
+
+    id: str = Field(description="레시피 ID")
+    title: str = Field(description="레시피 제목")
+    thumbnail_url: str | None = Field(None, description="썸네일 URL")
+    difficulty: str | None = Field(None, description="난이도")
+    cook_time_minutes: int | None = Field(None, description="조리 시간 (분)")
+    view_count: int = Field(description="조회수")
+    category: str = Field(description="카테고리")
+    tags: list[TagSummarySchema] = Field(
+        default_factory=list, description="태그 목록"
+    )
+
+
+class CategoryPopularListResponse(BaseModel):
+    """카테고리 인기 레시피 목록 응답 스키마"""
+
+    items: list[CategoryPopularItem] = Field(description="카테고리 인기 레시피 목록")
+    next_cursor: str | None = Field(None, description="다음 페이지 커서")
+    has_more: bool = Field(description="다음 페이지 존재 여부")
