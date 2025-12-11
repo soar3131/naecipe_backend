@@ -1,16 +1,18 @@
 """
 Cookbooks 모듈 라우터
 
-레시피북 CRUD 엔드포인트를 정의합니다.
+레시피북 및 저장된 레시피 CRUD 엔드포인트를 정의합니다.
 """
 
 import logging
 
-from fastapi import APIRouter, status
+from fastapi import APIRouter, Query, status
 
 from app.cookbooks.exceptions import (
     CannotDeleteDefaultCookbookError,
     CookbookNotFoundError,
+    RecipeAlreadySavedError,
+    SavedRecipeNotFoundError,
 )
 from app.cookbooks.schemas import (
     CookbookCreateRequest,
@@ -18,8 +20,13 @@ from app.cookbooks.schemas import (
     CookbookReorderRequest,
     CookbookResponse,
     CookbookUpdateRequest,
+    SavedRecipeDetailResponse,
+    SavedRecipeListResponse,
+    SavedRecipeResponse,
+    SaveRecipeRequest,
+    UpdateSavedRecipeRequest,
 )
-from app.cookbooks.services import CookbookService
+from app.cookbooks.services import CookbookService, SavedRecipeService
 from app.core.dependencies import CurrentUserId, DbSession
 
 logger = logging.getLogger(__name__)
@@ -197,3 +204,163 @@ async def reorder_cookbooks(
     """
     service = CookbookService(db)
     return await service.reorder_cookbooks(user_id, data.cookbook_ids)
+
+
+# ==========================================================================
+# 저장된 레시피 CRUD 엔드포인트 (SPEC-008)
+# ==========================================================================
+
+
+@router.post(
+    "/cookbooks/{cookbook_id}/recipes",
+    response_model=SavedRecipeResponse,
+    status_code=status.HTTP_201_CREATED,
+    summary="레시피 저장",
+    description="원본 레시피를 레시피북에 저장합니다.",
+    tags=["saved-recipes"],
+    responses={
+        201: {"description": "레시피 저장됨"},
+        401: {"description": "인증 필요"},
+        404: {"description": "레시피북 또는 레시피를 찾을 수 없음"},
+        409: {"description": "이미 저장된 레시피"},
+        422: {"description": "유효성 검증 실패"},
+    },
+)
+async def save_recipe(
+    cookbook_id: str,
+    db: DbSession,
+    user_id: CurrentUserId,
+    data: SaveRecipeRequest,
+) -> SavedRecipeResponse:
+    """
+    레시피 저장 (User Story 1)
+
+    - **cookbook_id**: 레시피북 UUID
+    - **recipe_id**: 저장할 원본 레시피 UUID
+    - **memo**: 개인 메모 (최대 1000자, 선택)
+    - 동일 레시피 중복 저장 시 409 Conflict 반환
+    """
+    service = SavedRecipeService(db)
+    return await service.save_recipe(cookbook_id, user_id, data)
+
+
+@router.get(
+    "/cookbooks/{cookbook_id}/recipes",
+    response_model=SavedRecipeListResponse,
+    summary="저장된 레시피 목록 조회",
+    description="레시피북에 저장된 레시피 목록을 조회합니다.",
+    tags=["saved-recipes"],
+    responses={
+        200: {"description": "저장된 레시피 목록"},
+        401: {"description": "인증 필요"},
+        404: {"description": "레시피북을 찾을 수 없음"},
+    },
+)
+async def list_saved_recipes(
+    cookbook_id: str,
+    db: DbSession,
+    user_id: CurrentUserId,
+    limit: int = Query(default=20, ge=1, le=100, description="페이지당 항목 수"),
+    offset: int = Query(default=0, ge=0, description="건너뛸 항목 수"),
+) -> SavedRecipeListResponse:
+    """
+    저장된 레시피 목록 조회 (User Story 2)
+
+    - **cookbook_id**: 레시피북 UUID
+    - **limit**: 페이지당 항목 수 (기본 20, 최대 100)
+    - **offset**: 건너뛸 항목 수
+    - 저장 시간 내림차순 정렬 (최신순)
+    """
+    service = SavedRecipeService(db)
+    return await service.list_saved_recipes(cookbook_id, user_id, limit, offset)
+
+
+@router.get(
+    "/cookbooks/{cookbook_id}/recipes/{saved_recipe_id}",
+    response_model=SavedRecipeDetailResponse,
+    summary="저장된 레시피 상세 조회",
+    description="저장된 레시피의 상세 정보를 조회합니다.",
+    tags=["saved-recipes"],
+    responses={
+        200: {"description": "저장된 레시피 상세 정보"},
+        401: {"description": "인증 필요"},
+        404: {"description": "레시피북 또는 저장된 레시피를 찾을 수 없음"},
+    },
+)
+async def get_saved_recipe(
+    cookbook_id: str,
+    saved_recipe_id: str,
+    db: DbSession,
+    user_id: CurrentUserId,
+) -> SavedRecipeDetailResponse:
+    """
+    저장된 레시피 상세 조회 (User Story 3)
+
+    - **cookbook_id**: 레시피북 UUID
+    - **saved_recipe_id**: 저장된 레시피 UUID
+    - 원본 레시피 상세 정보 포함
+    """
+    service = SavedRecipeService(db)
+    return await service.get_saved_recipe(cookbook_id, saved_recipe_id, user_id)
+
+
+@router.patch(
+    "/cookbooks/{cookbook_id}/recipes/{saved_recipe_id}",
+    response_model=SavedRecipeResponse,
+    summary="저장된 레시피 수정",
+    description="저장된 레시피의 메모를 수정합니다.",
+    tags=["saved-recipes"],
+    responses={
+        200: {"description": "저장된 레시피 수정됨"},
+        401: {"description": "인증 필요"},
+        404: {"description": "레시피북 또는 저장된 레시피를 찾을 수 없음"},
+        422: {"description": "유효성 검증 실패"},
+    },
+)
+async def update_saved_recipe(
+    cookbook_id: str,
+    saved_recipe_id: str,
+    db: DbSession,
+    user_id: CurrentUserId,
+    data: UpdateSavedRecipeRequest,
+) -> SavedRecipeResponse:
+    """
+    저장된 레시피 수정 (User Story 4)
+
+    - **cookbook_id**: 레시피북 UUID
+    - **saved_recipe_id**: 저장된 레시피 UUID
+    - **memo**: 새로운 메모 (null로 삭제 가능)
+    """
+    service = SavedRecipeService(db)
+    return await service.update_saved_recipe(
+        cookbook_id, saved_recipe_id, user_id, data
+    )
+
+
+@router.delete(
+    "/cookbooks/{cookbook_id}/recipes/{saved_recipe_id}",
+    status_code=status.HTTP_204_NO_CONTENT,
+    summary="저장된 레시피 삭제",
+    description="저장된 레시피를 삭제합니다.",
+    tags=["saved-recipes"],
+    responses={
+        204: {"description": "저장된 레시피 삭제됨"},
+        401: {"description": "인증 필요"},
+        404: {"description": "레시피북 또는 저장된 레시피를 찾을 수 없음"},
+    },
+)
+async def delete_saved_recipe(
+    cookbook_id: str,
+    saved_recipe_id: str,
+    db: DbSession,
+    user_id: CurrentUserId,
+) -> None:
+    """
+    저장된 레시피 삭제 (User Story 5)
+
+    - **cookbook_id**: 레시피북 UUID
+    - **saved_recipe_id**: 저장된 레시피 UUID
+    - 삭제 시 연관된 RecipeVariation도 함께 삭제됨 (CASCADE)
+    """
+    service = SavedRecipeService(db)
+    await service.delete_saved_recipe(cookbook_id, saved_recipe_id, user_id)

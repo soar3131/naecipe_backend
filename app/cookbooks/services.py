@@ -1,25 +1,36 @@
 """
 Cookbooks 모듈 서비스
 
-레시피북 비즈니스 로직을 담당합니다.
+레시피북 및 저장된 레시피 비즈니스 로직을 담당합니다.
 """
 
 import logging
 from uuid import uuid4
 
 from sqlalchemy import func, select, update
+from sqlalchemy.exc import IntegrityError
 from sqlalchemy.ext.asyncio import AsyncSession
+from sqlalchemy.orm import joinedload
 
 from app.cookbooks.exceptions import (
     CannotDeleteDefaultCookbookError,
     CookbookNotFoundError,
+    RecipeAlreadySavedError,
+    SavedRecipeNotFoundError,
 )
-from app.cookbooks.models import Cookbook
+from app.cookbooks.models import Cookbook, SavedRecipe
+from app.recipes.models import Recipe
 from app.cookbooks.schemas import (
     CookbookCreateRequest,
     CookbookListResponse,
     CookbookResponse,
     CookbookUpdateRequest,
+    RecipeSummary,
+    SavedRecipeDetailResponse,
+    SavedRecipeListResponse,
+    SavedRecipeResponse,
+    SaveRecipeRequest,
+    UpdateSavedRecipeRequest,
 )
 
 logger = logging.getLogger(__name__)
@@ -359,3 +370,370 @@ class CookbookService:
 
         # 업데이트된 목록 반환
         return await self.get_cookbooks(user_id)
+
+    # ==========================================================================
+    # SavedRecipe 관련 헬퍼 메서드 (SPEC-008)
+    # ==========================================================================
+
+    async def get_cookbook_for_user(
+        self,
+        cookbook_id: str,
+        user_id: str,
+    ) -> Cookbook:
+        """
+        사용자 소유의 레시피북 조회 (내부용)
+
+        - 사용자 소유의 레시피북만 조회 가능
+        - 없거나 권한 없으면 CookbookNotFoundError 발생
+        """
+        stmt = select(Cookbook).where(
+            Cookbook.id == cookbook_id,
+            Cookbook.user_id == user_id,
+        )
+        cookbook = await self.session.scalar(stmt)
+
+        if not cookbook:
+            raise CookbookNotFoundError(cookbook_id)
+
+        return cookbook
+
+
+# ==========================================================================
+# SavedRecipe 서비스 (SPEC-008)
+# ==========================================================================
+
+
+class SavedRecipeService:
+    """저장된 레시피 서비스"""
+
+    def __init__(self, session: AsyncSession) -> None:
+        self.session = session
+        self.cookbook_service = CookbookService(session)
+
+    # ==========================================================================
+    # 레시피 저장 (US1)
+    # ==========================================================================
+
+    async def save_recipe(
+        self,
+        cookbook_id: str,
+        user_id: str,
+        data: SaveRecipeRequest,
+    ) -> SavedRecipeResponse:
+        """
+        레시피를 레시피북에 저장
+
+        - 사용자 소유의 레시피북에만 저장 가능
+        - 동일 레시피 중복 저장 시 409 Conflict
+        - 존재하지 않는 레시피 저장 시 404 Not Found
+        """
+        # 레시피북 소유권 확인
+        cookbook = await self.cookbook_service.get_cookbook_for_user(
+            cookbook_id, user_id
+        )
+
+        # 레시피 존재 확인은 FK 제약조건으로 처리
+        # (IntegrityError 발생 시 RecipeNotFoundError로 변환)
+
+        # 저장된 레시피 생성
+        saved_recipe = SavedRecipe(
+            id=str(uuid4()),
+            cookbook_id=cookbook.id,
+            original_recipe_id=data.recipe_id,
+            memo=data.memo,
+        )
+
+        try:
+            self.session.add(saved_recipe)
+            await self.session.flush()
+        except IntegrityError as e:
+            await self.session.rollback()
+            error_msg = str(e.orig) if e.orig else str(e)
+
+            # UNIQUE 제약조건 위반 (중복 저장)
+            if "uq_saved_recipes_cookbook_recipe" in error_msg:
+                logger.warning(
+                    "레시피 중복 저장 시도",
+                    extra={
+                        "cookbook_id": cookbook_id,
+                        "recipe_id": data.recipe_id,
+                        "user_id": user_id,
+                    },
+                )
+                raise RecipeAlreadySavedError(data.recipe_id, cookbook_id)
+
+            # FK 제약조건 위반 (레시피 미존재)
+            if "recipes" in error_msg.lower():
+                from app.core.exceptions import RecipeNotFoundError
+
+                raise RecipeNotFoundError(data.recipe_id)
+
+            raise
+
+        logger.info(
+            "레시피 저장됨",
+            extra={
+                "saved_recipe_id": saved_recipe.id,
+                "cookbook_id": cookbook_id,
+                "recipe_id": data.recipe_id,
+                "user_id": user_id,
+            },
+        )
+
+        # 원본 레시피 정보 조회를 위해 다시 로드
+        await self.session.refresh(saved_recipe, ["original_recipe"])
+
+        return self._to_response(saved_recipe)
+
+    # ==========================================================================
+    # 목록 조회 (US2)
+    # ==========================================================================
+
+    async def list_saved_recipes(
+        self,
+        cookbook_id: str,
+        user_id: str,
+        limit: int = 20,
+        offset: int = 0,
+    ) -> SavedRecipeListResponse:
+        """
+        저장된 레시피 목록 조회
+
+        - 사용자 소유의 레시피북만 조회 가능
+        - 페이지네이션 지원 (limit/offset)
+        - 저장 시간 내림차순 정렬
+        """
+        # 레시피북 소유권 확인
+        await self.cookbook_service.get_cookbook_for_user(cookbook_id, user_id)
+
+        # 전체 개수 조회
+        count_stmt = (
+            select(func.count())
+            .select_from(SavedRecipe)
+            .where(SavedRecipe.cookbook_id == cookbook_id)
+        )
+        total = await self.session.scalar(count_stmt) or 0
+
+        # 목록 조회 (원본 레시피 조인)
+        stmt = (
+            select(SavedRecipe)
+            .options(joinedload(SavedRecipe.original_recipe))
+            .where(SavedRecipe.cookbook_id == cookbook_id)
+            .order_by(SavedRecipe.created_at.desc())
+            .offset(offset)
+            .limit(limit)
+        )
+        result = await self.session.scalars(stmt)
+        saved_recipes = result.unique().all()
+
+        items = [self._to_response(sr) for sr in saved_recipes]
+
+        logger.debug(
+            "저장된 레시피 목록 조회",
+            extra={
+                "cookbook_id": cookbook_id,
+                "user_id": user_id,
+                "count": len(items),
+                "total": total,
+            },
+        )
+
+        return SavedRecipeListResponse(
+            items=items,
+            total=total,
+            limit=limit,
+            offset=offset,
+        )
+
+    # ==========================================================================
+    # 상세 조회 (US3)
+    # ==========================================================================
+
+    async def get_saved_recipe(
+        self,
+        cookbook_id: str,
+        saved_recipe_id: str,
+        user_id: str,
+    ) -> SavedRecipeDetailResponse:
+        """
+        저장된 레시피 상세 조회
+
+        - 사용자 소유의 레시피북만 조회 가능
+        - 원본 레시피 상세 정보 포함
+        """
+        # 레시피북 소유권 확인
+        await self.cookbook_service.get_cookbook_for_user(cookbook_id, user_id)
+
+        # 저장된 레시피 조회
+        stmt = (
+            select(SavedRecipe)
+            .options(joinedload(SavedRecipe.original_recipe))
+            .where(
+                SavedRecipe.id == saved_recipe_id,
+                SavedRecipe.cookbook_id == cookbook_id,
+            )
+        )
+        saved_recipe = await self.session.scalar(stmt)
+
+        if not saved_recipe:
+            raise SavedRecipeNotFoundError(saved_recipe_id)
+
+        logger.debug(
+            "저장된 레시피 상세 조회",
+            extra={
+                "saved_recipe_id": saved_recipe_id,
+                "cookbook_id": cookbook_id,
+                "user_id": user_id,
+            },
+        )
+
+        return self._to_detail_response(saved_recipe)
+
+    # ==========================================================================
+    # 수정 (US4)
+    # ==========================================================================
+
+    async def update_saved_recipe(
+        self,
+        cookbook_id: str,
+        saved_recipe_id: str,
+        user_id: str,
+        data: UpdateSavedRecipeRequest,
+    ) -> SavedRecipeResponse:
+        """
+        저장된 레시피 수정 (메모)
+
+        - 사용자 소유의 레시피북만 수정 가능
+        - 메모만 수정 가능
+        """
+        # 레시피북 소유권 확인
+        await self.cookbook_service.get_cookbook_for_user(cookbook_id, user_id)
+
+        # 저장된 레시피 조회
+        stmt = (
+            select(SavedRecipe)
+            .options(
+                joinedload(SavedRecipe.original_recipe).joinedload(Recipe.chef)
+            )
+            .where(
+                SavedRecipe.id == saved_recipe_id,
+                SavedRecipe.cookbook_id == cookbook_id,
+            )
+        )
+        saved_recipe = await self.session.scalar(stmt)
+
+        if not saved_recipe:
+            raise SavedRecipeNotFoundError(saved_recipe_id)
+
+        # 메모 업데이트
+        saved_recipe.memo = data.memo
+        await self.session.flush()
+
+        # flush 후 전체 객체 새로고침 (lazy loading 방지)
+        await self.session.refresh(saved_recipe)
+        # 관계 다시 로드
+        stmt = (
+            select(SavedRecipe)
+            .options(
+                joinedload(SavedRecipe.original_recipe).joinedload(Recipe.chef)
+            )
+            .where(SavedRecipe.id == saved_recipe_id)
+        )
+        saved_recipe = await self.session.scalar(stmt)
+
+        logger.info(
+            "저장된 레시피 수정됨",
+            extra={
+                "saved_recipe_id": saved_recipe_id,
+                "cookbook_id": cookbook_id,
+                "user_id": user_id,
+            },
+        )
+
+        return self._to_response(saved_recipe)
+
+    # ==========================================================================
+    # 삭제 (US5)
+    # ==========================================================================
+
+    async def delete_saved_recipe(
+        self,
+        cookbook_id: str,
+        saved_recipe_id: str,
+        user_id: str,
+    ) -> None:
+        """
+        저장된 레시피 삭제
+
+        - 사용자 소유의 레시피북만 삭제 가능
+        - CASCADE로 연관된 RecipeVariation도 삭제 (SPEC-009)
+        """
+        # 레시피북 소유권 확인
+        await self.cookbook_service.get_cookbook_for_user(cookbook_id, user_id)
+
+        # 저장된 레시피 조회
+        stmt = select(SavedRecipe).where(
+            SavedRecipe.id == saved_recipe_id,
+            SavedRecipe.cookbook_id == cookbook_id,
+        )
+        saved_recipe = await self.session.scalar(stmt)
+
+        if not saved_recipe:
+            raise SavedRecipeNotFoundError(saved_recipe_id)
+
+        await self.session.delete(saved_recipe)
+        await self.session.flush()
+
+        logger.info(
+            "저장된 레시피 삭제됨",
+            extra={
+                "saved_recipe_id": saved_recipe_id,
+                "cookbook_id": cookbook_id,
+                "user_id": user_id,
+            },
+        )
+
+    # ==========================================================================
+    # 응답 변환 헬퍼
+    # ==========================================================================
+
+    def _to_response(self, saved_recipe: SavedRecipe) -> SavedRecipeResponse:
+        """SavedRecipe 모델을 응답 스키마로 변환"""
+        recipe_summary = None
+        if saved_recipe.original_recipe:
+            recipe = saved_recipe.original_recipe
+            chef_name = None
+            if hasattr(recipe, "chef") and recipe.chef:
+                chef_name = recipe.chef.name
+
+            recipe_summary = RecipeSummary(
+                id=recipe.id,
+                title=recipe.title,
+                thumbnail_url=recipe.thumbnail_url,
+                chef_name=chef_name,
+            )
+
+        return SavedRecipeResponse(
+            id=saved_recipe.id,
+            cookbook_id=saved_recipe.cookbook_id,
+            recipe=recipe_summary,
+            memo=saved_recipe.memo,
+            cook_count=saved_recipe.cook_count,
+            personal_rating=(
+                float(saved_recipe.personal_rating)
+                if saved_recipe.personal_rating
+                else None
+            ),
+            last_cooked_at=saved_recipe.last_cooked_at,
+            created_at=saved_recipe.created_at,
+            updated_at=saved_recipe.updated_at,
+        )
+
+    def _to_detail_response(
+        self, saved_recipe: SavedRecipe
+    ) -> SavedRecipeDetailResponse:
+        """SavedRecipe 모델을 상세 응답 스키마로 변환"""
+        # 현재는 기본 응답과 동일
+        # 추후 RecipeDetail 전체 정보 포함으로 확장
+        response = self._to_response(saved_recipe)
+        return SavedRecipeDetailResponse(**response.model_dump())

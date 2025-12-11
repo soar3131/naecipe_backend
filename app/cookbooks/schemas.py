@@ -142,3 +142,96 @@ class CookbookListResponse(BaseModel):
 
     items: list[CookbookResponse] = Field(..., description="레시피북 목록")
     total: int = Field(..., description="전체 레시피북 수")
+
+
+# ==========================================================================
+# SavedRecipe 스키마 (SPEC-008)
+# ==========================================================================
+
+
+class SaveRecipeRequest(BaseModel):
+    """레시피 저장 요청"""
+
+    recipe_id: str = Field(
+        ...,
+        description="저장할 원본 레시피 ID",
+        examples=["550e8400-e29b-41d4-a716-446655440001"],
+    )
+    memo: str | None = Field(
+        default=None,
+        max_length=1000,
+        description="개인 메모 (최대 1000자)",
+        examples=["백종원 레시피! 돼지고기 300g 필요"],
+    )
+
+    @field_validator("memo")
+    @classmethod
+    def validate_memo(cls, v: str | None) -> str | None:
+        """메모 앞뒤 공백 제거"""
+        if v is not None:
+            v = v.strip()
+            return v if v else None
+        return v
+
+
+class UpdateSavedRecipeRequest(BaseModel):
+    """저장된 레시피 수정 요청 (메모 수정)"""
+
+    memo: str | None = Field(
+        default=None,
+        max_length=1000,
+        description="개인 메모 (최대 1000자, null로 삭제 가능)",
+    )
+
+    @field_validator("memo")
+    @classmethod
+    def validate_memo(cls, v: str | None) -> str | None:
+        """메모 앞뒤 공백 제거"""
+        if v is not None:
+            v = v.strip()
+            return v if v else None
+        return v
+
+
+class RecipeSummary(BaseModel):
+    """레시피 요약 정보 (저장된 레시피 목록용)"""
+
+    model_config = ConfigDict(from_attributes=True)
+
+    id: str = Field(..., description="레시피 ID")
+    title: str = Field(..., description="레시피 제목")
+    thumbnail_url: str | None = Field(None, description="썸네일 URL")
+    chef_name: str | None = Field(None, description="셰프 이름")
+
+
+class SavedRecipeResponse(BaseModel):
+    """저장된 레시피 응답"""
+
+    model_config = ConfigDict(from_attributes=True)
+
+    id: str = Field(..., description="저장된 레시피 ID")
+    cookbook_id: str = Field(..., description="레시피북 ID")
+    recipe: RecipeSummary | None = Field(None, description="원본 레시피 정보")
+    memo: str | None = Field(None, description="개인 메모")
+    cook_count: int = Field(default=0, description="조리 횟수")
+    personal_rating: float | None = Field(None, description="개인 평점 (0.0-5.0)")
+    last_cooked_at: datetime | None = Field(None, description="마지막 조리 일시")
+    created_at: datetime = Field(..., description="저장 시각")
+    updated_at: datetime = Field(..., description="수정 시각")
+
+
+class SavedRecipeDetailResponse(SavedRecipeResponse):
+    """저장된 레시피 상세 응답 (원본 레시피 전체 정보 포함)"""
+
+    # recipe 필드는 RecipeSummary 대신 상세 정보를 포함
+    # 현재는 SavedRecipeResponse와 동일, 추후 RecipeDetail 스키마로 확장
+    pass
+
+
+class SavedRecipeListResponse(BaseModel):
+    """저장된 레시피 목록 응답"""
+
+    items: list[SavedRecipeResponse] = Field(..., description="저장된 레시피 목록")
+    total: int = Field(..., description="전체 항목 수")
+    limit: int = Field(..., description="페이지당 항목 수")
+    offset: int = Field(..., description="건너뛴 항목 수")
