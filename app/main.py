@@ -84,6 +84,7 @@ def create_app() -> FastAPI:
 
 def _include_routers(app: FastAPI) -> None:
     """라우터 등록"""
+    from app.cookbooks import router as cookbooks_router
     from app.recipes import router as recipes_router
     from app.users import router as users_router
 
@@ -101,8 +102,14 @@ def _include_routers(app: FastAPI) -> None:
         tags=["recipes"],
     )
 
+    # Cookbooks 모듈 (레시피북 CRUD)
+    app.include_router(
+        cookbooks_router,
+        prefix="/api/v1",
+        tags=["cookbooks"],
+    )
+
     # 추후 구현 예정 모듈들은 여기에 추가
-    # app.include_router(cookbooks_router, prefix="/api/v1")
     # app.include_router(ai_agent_router, prefix="/api/v1")
     # app.include_router(notifications_router, prefix="/api/v1")
 
